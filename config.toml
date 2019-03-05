@@ -1,0 +1,19 @@
+[optics]
+M       =   20.0            # Objective magnification
+NA      =   1.0             # Numerical aperture of obj
+ftl     =   165e-3          # Focal length of tube lens
+n       =   1.33            # Refractive index
+lambda  =   517e-9          # Wavelength of light imaged
+a0      =   25e-3           # MLA offset from NIP
+b0      =   2700e-6         # camera offset from MLA image plane
+
+[mla]
+pitch   =   125e-6          # Microlens (lenslet) pitch
+fml     =   2500e-6         # Focal length of MLA in microns
+
+[simparams]
+vpix    =   15              # Number of virtual pixels for each lenslet
+osr     =   3               # Oversampling ratio
+zmax    =   50e-6           # Max. Z depth to reconstruct (pos=obj side)
+zmin    =   0e-6            # Min. Z depth to reconstruct
+zstep   =   1e-6            # Z-plane spacing in reconstruction
