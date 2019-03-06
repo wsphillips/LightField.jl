@@ -1,0 +1,7 @@
+name = "LightField"
+uuid = "7cdec32e-401e-11e9-1561-2d3dc5745ba2"
+authors = ["Wiktor <wsphillips@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+TOML = "191fdcea-f9f2-43e0-b922-d33f71e2abc3"
