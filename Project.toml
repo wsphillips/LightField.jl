@@ -4,4 +4,6 @@ authors = ["Wiktor <wsphillips@gmail.com>"]
 version = "0.1.0"
 
 [deps]
+FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"
+SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 TOML = "191fdcea-f9f2-43e0-b922-d33f71e2abc3"
