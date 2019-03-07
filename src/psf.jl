@@ -6,23 +6,36 @@ import FastGaussQuadrature.gausslegendre
 export intpsf
 
 function intervalchange(x::Float64,a::Float64,b::Float64)
-    newx = (((b-a)/2.0)*x) + ((a + b)/2.0)
+
+    newx = x*(b-a)/2 + (a+b)/2
+
     return newx
 end
 
-function psf(θ::Float64, α::Float64, v, u, a₀::Float64)
+function psf(θ::Float64, α::Float64, v::Float64, u::Float64, a₀::Float64)
     if a₀ > 0.0
-        intensity = sqrt(cos(θ)) * besselj(0, v*sin(θ)/sin(α)) * exp((im*u*sin(θ/2)^2)/(2*sin(α/2)^2)) * sin(θ)
+        # PSF for classic LFM
+        I = sqrt(cos(θ)) * besselj(0, v*sin(θ)/sin(α)) * exp((im*u*sin(θ/2)^2)/
+                                                        (2*sin(α/2)^2)) * sin(θ)
     else
-        intensity = (sqrt(cos(theta)).*besselj.(0,((v.*sin(theta))./sin(alpha))).*(exp((-im*u*sin(theta/2)^2)/(2*sin(alpha/2)^2))*sin(theta)))
+        # PSF as given by Li et al. 2018. Used when MLA is offset from NIP by
+        # distance a₀
+        I = sqrt(cos(θ)) * besselj(0,v*sin(θ)/sin(α)) * exp((-im*u*sin(θ/2)^2)/
+                                                        (2*sin(α/2)^2)) * sin(θ)
     end
-    return intensity
+    return I
 end
 
-function intpsf(a::Float64, b::Float64, v, u, a0::Float64)
-    (nodes, weights) = gausslegendre(500)
-    integral = ((b-a)/2) .* sum(psf.(intervalchange.(nodes, a, b),v,u).*weights, dims=2)
+function intpsf(v::Float64, u::Float64, a₀::Float64, α::Float64)
+
+    # NOTE: Number of quadrature nodes can be tuned for speed or accuracy
+    (x, weights) = gausslegendre(100)
+
+    θ = intervalchange.(x, 0.0, α)
+
+    integral = (α/2) * sum(psf.(θ, α, v, u, a₀) .* weights)
+
     return integral
 end
 
-end
+end # module

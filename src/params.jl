@@ -3,7 +3,7 @@ module params
 using TOML
 
 export setup
-export Space
+export ParameterSet, Space
 
 struct MicroLensArray
 
@@ -100,14 +100,13 @@ struct Constants
 end
 
 struct ParameterSet
-
     mla::MicroLensArray
     opt::MicOptics
     sim::SimulationParams
     con::Constants
 end
 
-function setup(filename::AbstractString)
+function setup(filename::String)
 
     config = TOML.parsefile(filename)
 
@@ -117,10 +116,26 @@ function setup(filename::AbstractString)
     con = Constants(opt)
     par = ParameterSet(mla, opt, sim, con)
 
-    return (par)
+    # TODO: flesh out space definitions here
+
+    #x1objspace = (pixelPitch/M).*(-fld(Nnum,1):0:fld(Nnum,1))
+    #x2objspace = (pixelPitch/M).*(-fld(Nnum,1):0:fld(Nnum,1))
+    #x3objspace = zmin:zspacing:zmax
+
+    #x1MLspace = (-(subNnum-1)/2 : 1 : (subNnum-1)/2) * subpixelpitch
+    #x2MLspace = (-(subNnum-1)/2 : 1 : (subNnum-1)/2) * subpixelpitch
+    #x3MLspace = 0
+
+    # ...then image space is defined by psfsize functions
+
+    objspace = Space(x,y,z)
+    mlaspace = Space(x,y,z)
+
+    return (par, objspace, mlaspace)
 end
 
 struct Space
+    # TODO: Decide if there should be more embedded parameters
     x::Vector{Float64}
     y::Vector{Float64}
     z::Vector{Float64}
@@ -137,4 +152,4 @@ struct Space
 end
 
 
-end
+end # module

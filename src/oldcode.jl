@@ -275,25 +275,7 @@ Provides the halfwidth of region considered in follow-up simulation and
 reconstruction."""
 psfLine = calcPSFFT(x1testspace, M, k, alpha, x3objmax, fobj)
 
-"Set a threshold where the value of the psfLine reaches near zero"
-outArea = psfLine.<0.01
-if sum(outArea) == 0
-    error("Estimated PSF size exceeds the limit")
-end
-IMGSIZE_REF = cld(findfirst(outArea)[1],subNnum)
-println("Maximum half-size of PSF ~= " * string(IMGSIZE_REF) * " * [microlens pitch]")
-if a0 > 0
-    """ Gives the number of supersampled pixels across the image. Note padding of
-    1 extra microlens after ceiling value above."""
-    IMG_HALFWIDTH = max( subNnum*(IMGSIZE_REF + 1), 12*subNnum) ## 12 is arbitrary
-else
-    IMG_HALFWIDTH = max( subNnum*(IMGSIZE_REF + 1), 2*subNnum)
-end
-"Create X-Y image space based on halfwidth."
-x1_imgspace =(-IMG_HALFWIDTH:1:IMG_HALFWIDTH) * subpixelpitch
-x2_imgspace =(-IMG_HALFWIDTH:1:IMG_HALFWIDTH) * subpixelpitch
-x1_imgspacelength = length(x1_imgspace)
-x2_imgspacelength = length(x2_imgspace)
+
 
 
 #####################################################
@@ -330,8 +312,8 @@ println("Prepping for PSF Computation")
 Define object space imaged by each lenslet in X & Y planes. Previously this
 was modeled as a line at the origin (0,0) on Z axis. Now expanded to 3D
 """
-x1objspace = (pixelPitch/M).*(-fld(Nnum,2):1:fld(Nnum,2))
-x2objspace = (pixelPitch/M).*(-fld(Nnum,2):1:fld(Nnum,2))
+x0objspace = (pixelPitch/M).*(-fld(Nnum,1):0:fld(Nnum,1))
+x1objspace = (pixelPitch/M).*(-fld(Nnum,1):0:fld(Nnum,1))
 
 "These are scaling terms to convert array subscripts to obj space"
 XREF = cld(length(x1objspace),2)
