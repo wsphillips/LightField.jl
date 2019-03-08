@@ -1,6 +1,7 @@
 module psfsize
 
-using .params
+using LightField.params
+using LightField.psf
 export calcsize
 
 function calcsize(p::ParameterSet, objspace::Space)
@@ -27,7 +28,7 @@ function psfline(x₁testline::Vector{Float64}, x₃max::Float64, M::Float64,
     linearpsf = complex(zeros(length(v)))
 
     Threads.@threads for i in 1:length(v)
-        @inbounds linearpsf[i] .= intpsf(v[i], u, a₀, α) * Kₒ
+        @inbounds linearpsf[i] = intpsf(v[i], u, a₀, α) * Kₒ
     end
 
     linearpsfmag = Float64.( abs2.(linearpsf) ./ maximum(abs2.(linearpsf)) )
@@ -37,34 +38,30 @@ end
 
 function makeimgspace(psfline::Vector{Float64}, p::ParameterSet)
 
-# TODO: refactor this old code to return a Space object
-#=
-"Set a threshold where the value of the psfLine reaches near zero"
+    # Set a threshold where the value of the psfline reaches ~0
+    outArea = psfline .< 0.01
 
-outArea = psfline .< 0.01
+    # This will likely never happen but good flag to check if we do huge volumes
+    if sum(outArea) == 0
+        error("Estimated PSF size exceeds the limit")
+    end
 
-if sum(outArea) == 0
-    error("Estimated PSF size exceeds the limit")
-end
+    sizeref = cld(findfirst(outArea)[1],p.sim.subvpix)
 
-IMGSIZE_REF = cld(findfirst(outArea)[1],subNnum)
+    if p.opt.a0 > 0
+        """ Gives the number of supersampled pixels across the image. Note padding
+        of 1 extra microlens after ceiling value above."""
+        halfwidth = max( p.sim.subvpix*(sizeref + 1), 12*p.sim.subvpix)
+        # 12 is arbitrary; needs to be high bc img width can be larger near origin
+        # than it is at x3max if using a0 displacement
+    else
+        halfwidth = max( p.sim.subvpix*(sizeref + 1), 2*p.sim.subvpix)
+        # simple linear scaling works fine with classic LFM
+    end
+    "Create X-Y image space based on halfwidth."
+    x =(-halfwidth:1:halfwidth) * p.sim.subpixelpitch
+    y =(-halfwidth:1:halfwidth) * p.sim.subpixelpitch
 
-if a0 > 0
-    """ Gives the number of supersampled pixels across the image. Note padding
-    of 1 extra microlens after ceiling value above."""
-    IMG_HALFWIDTH = max( subNnum*(IMGSIZE_REF + 1), 12*subNnum)
-    # 12 is arbitrary; needs to be high bc img width can be larger near origin
-    # than it is at x3max if using a0 displacement
-else
-    IMG_HALFWIDTH = max( subNnum*(IMGSIZE_REF + 1), 2*subNnum)
-    # simple linear scaling works with classic LFM
-end
-"Create X-Y image space based on halfwidth."
-x1_imgspace =(-IMG_HALFWIDTH:1:IMG_HALFWIDTH) * subpixelpitch
-x2_imgspace =(-IMG_HALFWIDTH:1:IMG_HALFWIDTH) * subpixelpitch
-x1_imgspacelength = length(x1_imgspace)
-x2_imgspacelength = length(x2_imgspace)
-=#
     imgspace = Space(x,y)
 
     return imgspace

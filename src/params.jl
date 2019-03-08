@@ -117,19 +117,21 @@ function setup(filename::String)
     par = ParameterSet(mla, opt, sim, con)
 
     # TODO: flesh out space definitions here
+    # add halfwidth, centerpt? max?
 
-    #x1objspace = (pixelPitch/M).*(-fld(Nnum,1):0:fld(Nnum,1))
-    #x2objspace = (pixelPitch/M).*(-fld(Nnum,1):0:fld(Nnum,1))
-    #x3objspace = zmin:zspacing:zmax
+    xobj = collect((sim.pixelpitch/opt.M) .* (-sim.vpix:1:sim.vpix))
+    yobj = collect((sim.pixelpitch/opt.M) .* (-sim.vpix:1:sim.vpix))
+    zobj = collect(sim.zmin:sim.zstep:sim.zmax)
 
-    #x1MLspace = (-(subNnum-1)/2 : 1 : (subNnum-1)/2) * subpixelpitch
-    #x2MLspace = (-(subNnum-1)/2 : 1 : (subNnum-1)/2) * subpixelpitch
-    #x3MLspace = 0
+    xml = collect((-(sim.subvpix-1)/2 : 1 : (sim.subvpix-1)/2) .*
+                                                            sim.subpixelpitch)
+    yml = collect((-(sim.subvpix-1)/2 : 1 : (sim.subvpix-1)/2) .*
+                                                            sim.subpixelpitch)
 
     # ...then image space is defined by psfsize functions
 
-    objspace = Space(x,y,z)
-    mlaspace = Space(x,y,z)
+    objspace = Space(xobj, yobj, zobj)
+    mlaspace = Space(xml, yml)
 
     return (par, objspace, mlaspace)
 end

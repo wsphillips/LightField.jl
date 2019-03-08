@@ -4,8 +4,7 @@ include("params.jl")
 include("psf.jl")
 include("psfsize.jl")
 
-using params, psf, psfsize
-
+using .psf, .psfsize, .params
 export setup, calcsize
 
 
