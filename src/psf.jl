@@ -2,8 +2,9 @@ module psf
 
 import SpecialFunctions.besselj
 import FastGaussQuadrature.gausslegendre
+import LinearAlgebra.Symmetric
 
-export intpsf
+export intpsf, makeHmatrix, calcPSF
 
 function intervalchange(x::Float64,a::Float64,b::Float64)
 
@@ -41,11 +42,27 @@ function intpsf(v::Float64, u::Float64, a₀::Float64, α::Float64)
     return integral
 end
 
-# TODO: Refactor this code. Check for package add to do symmetric matrix
+function makeHmatrix(f0::Array{Complex{Float64},2}, par::ParameterSet, z::Float64)
+    Nx = size(f0,1)
+    f0length = par.sim.subpixelpitch*Nx
 
-# x3objspace == objspace.z
-# use parameter set for k M fobj lambda alpha
-#
+    # Generates spatial frequency range at 256-bit precision to avoid inexact error
+    truestep = BigFloat(one(BigFloat)/f0length)
+    endpt = BigFloat(one(BigFloat)/(2*par.sim.subpixelpitch))
+    spfreq = range(-endpt, stop=endpt-truestep, length=Nx)
+
+    # Setup frequency axes
+    fx = spfreq'
+    fy = reverse(spfreq, dims=1)
+    FXFY = fx.^2 .+ fy.^2
+
+    # Fresnel propagation func. (see: Computational Fourier Optics p.54-55,63)
+    h = exp(im*par.con.k0*z).*exp.((-im*pi*par.opt.lambda*z) .* FXFY)
+    # Shifted for later fourier space calc and converted back to 64bit precision
+    H = ComplexF64.(fftshift(h))
+
+    return H
+end
 
 function calcPSF(imgspace::Space, objspace::Space, par::ParameterSet)
 
@@ -58,11 +75,10 @@ function calcPSF(imgspace::Space, objspace::Space, par::ParameterSet)
     integratePSF(originimgs, pattern_stack, objspace, par)
 
     #This is what happens when Shu Jia lab super resolution is applied
-    # TODO: revise variable names
-    if a0 > 0.0
-        steps = 10
-        stepz = a0/10
-        Ha0 = makeHmatrix(originimgs[:,:,1],subpixelpitch,stepz,k0,lambda)
+    if par.opt.a0 > 0.0
+        steps::Int64 = 10
+        stepz = par.opt.a0/steps
+        Ha0 = makeHmatrix(originimgs[:,:,1], par, stepz)
         originimgs = itrfresnel_GPU!(originimgs, Ha0, steps)
     end
 
@@ -140,7 +156,7 @@ function integratePSF(originimgs::Array{Complex{Float64},3}, pattern_stack::Arra
     return
 end
 
-function itrfresnel_GPU!(originimgs, Ha0, steps)
+function itrfresnel_GPU!(originimgs::Array{Complex{Float64},3}, Ha0::Array{Complex{Float64},2}, steps::Int64)
 
     Ha0_GPU = cu(Ha0)
 
@@ -176,6 +192,5 @@ function itrfresnel_GPU!(originimgs, Ha0, steps)
 
     return originimgs
 end
-
 
 end # module

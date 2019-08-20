@@ -17,28 +17,8 @@ using CUDAdrv
 using CUDAnative
 using CuArrays
 
-function makeHmatrix(f0,dx,z,k0,lambda)
-    Nx = size(f0,1)
-    f0length = dx*Nx
 
-    # Generates spatial frequency range at 256-bit precision to avoid inexact error
-    truestep = BigFloat(one(BigFloat)/f0length)
-    endpt = BigFloat(one(BigFloat)/(2*dx))
-    spfreq = range(-endpt, stop=endpt-truestep, length=Nx)
-
-    # Setup frequency axes
-    fx = spfreq'
-    fy = reverse(spfreq, dims=1)
-    FXFY = fx.^2 .+ fy.^2
-
-    # Fresnel propagation func. (see: Computational Fourier Optics p.54-55,63)
-    h = exp(im*k0*z).*exp.((-im*pi*lambda*z) .* FXFY)
-    # Shifted for later fourier space calc and converted back to 64bit precision
-    H = ComplexF64.(fftshift(h))
-
-    return H
-end
-
+#= unlikely needed if using phase space deconv
 function calcht(Himgs, Nnum, x3objspace,Xidx, Yidx, Zidx)
     Himgsize = size(Himgs,1)
     x3length = length(x3objspace)
@@ -108,7 +88,7 @@ function calcht(Himgs, Nnum, x3objspace,Xidx, Yidx, Zidx)
 
     return Ht
 end
-
+=#
 
 "These are scaling terms to convert array subscripts to obj space"
 XREF = cld(length(x1objspace),2)
