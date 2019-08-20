@@ -144,12 +144,14 @@ struct Space
     xlen::Int64
     ylen::Int64
     zlen::Int64
+    #new additions here
+    center::Int64
     function Space(x=[0.0],y=[0.0],z=[0.0])
         xlen = length(x)
         ylen = length(y)
         zlen = length(z)
-
-        new(x,y,z,xlen,ylen,zlen)
+        center = cld(xlen, 2)
+        new(x,y,z,xlen,ylen,zlen,center)
     end
 end
 

@@ -39,10 +39,6 @@ function makeHmatrix(f0,dx,z,k0,lambda)
     return H
 end
 
-
-
-
-
 function calcht(Himgs, Nnum, x3objspace,Xidx, Yidx, Zidx)
     Himgsize = size(Himgs,1)
     x3length = length(x3objspace)
@@ -190,8 +186,8 @@ for layer in 1:length(x3objspace)
 end
 
 #Scratch for viewing images as tiff in ImageJ
-afgc(1000)
-Ht = calcht(Himgs, Nnum, x3objspace,Xidx, Yidx, Zidx)
+#afgc(1000)
+#Ht = calcht(Himgs, Nnum, x3objspace,Xidx, Yidx, Zidx)
 
 
 @save "fullSimulation.jld2" Himgs Himgs32bit M Nnum SHIFTX SHIFTY Xidx Yidx Zidx pixelPitch x3objspace

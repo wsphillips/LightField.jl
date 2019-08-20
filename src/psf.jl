@@ -43,18 +43,22 @@ end
 
 # TODO: Refactor this code. Check for package add to do symmetric matrix
 
-function calcPSF(x3objspace,k,M,fobj,lambda,alpha,IMGSIZE_REF,subNnum,centerPT,x1_imgspacelength,x2_imgspacelength, x3objmax, dx, k0, a0)
+# x3objspace == objspace.z
+# use parameter set for k M fobj lambda alpha
+#
 
-    pattern_stack = Array{Array{Complex{Float64},2},1}(undef, length(x3objspace))
+function calcPSF(imgspace::Space, objspace::Space, par::ParameterSet)
 
-    originimgs = complex(zeros(x1_imgspacelength,x1_imgspacelength,length(x3objspace)))
+    pattern_stack = Array{Array{Complex{Float64},2},1}(undef, objspace.zlen)
 
+    originimgs = complex(zeros(imgspace.xlen,imgspace.ylen,objspace.zlen))
 
-    allocateStackMem(pattern_stack, x3objspace, centerPT)
+    allocateStackMem(pattern_stack, objspace)
 
-    integratePSF(originimgs, pattern_stack, x3objspace, centerPT, fobj, lambda, alpha, M, dx, k0, k, a0)
+    integratePSF(originimgs, pattern_stack, objspace, par)
 
     #This is what happens when Shu Jia lab super resolution is applied
+    # TODO: revise variable names
     if a0 > 0.0
         steps = 10
         stepz = a0/10
@@ -65,16 +69,19 @@ function calcPSF(x3objspace,k,M,fobj,lambda,alpha,IMGSIZE_REF,subNnum,centerPT,x
     return originimgs
 end
 
-function allocateStackMem(pattern_stack, x3objspace, centerPT)
-    for p in 1:length(x3objspace)
-        IMGSIZE_REF_IL = cld((IMGSIZE_REF*abs(x3objspace[p])),x3objmax)
+function allocateStackMem(pattern_stack::Array{Array{Complex{Float64},2},1}, objspace::Space, imgspace::Space)
 
-        halfWidth_IL =  max(IMGSIZE_REF_IL*subNnum, 2*subNnum)
+    zmax = max(objspace.z)
 
-        centerArea = max((centerPT - halfWidth_IL + 1) , 1):1:min((centerPT + halfWidth_IL - 1) , x1_imgspacelength)
+    for p in 1:objspace.zlen
+
+        IMGSIZE_REF_IL = cld((imgspace.xlen*abs(objspace.z[p])),zmax)
+        halfWidth_IL =  max(IMGSIZE_REF_IL*par.sim.subvpix, 2*par.sim.subvpix)
+        centerArea = max((imgspace.center - halfWidth_IL + 1) , 1):1:min((imgspace.center + halfWidth_IL - 1), imgspace.xlen)
 
         pattern_stack[p] = complex(zeros(Float64, length(centerArea), length(centerArea)))
     end
+
     return
 end
 
@@ -89,6 +96,48 @@ function unfoldPattern(I1,pattern)
     pattern[middle:end, 1:end] .= reverse(pattern[1:middle,1:end], dims=1)
 
     return pattern
+end
+
+function integratePSF(originimgs::Array{Complex{Float64},3}, pattern_stack::Array{Array{Complex{Float64},2},1}, objspace::Space, imgspace::Space, par::ParameterSet)
+
+    for j in 1:objspace.zlen
+
+        IMGSIZE_REF_IL = cld((imgspace.xlen*abs(objspace.z[p])),zmax)
+        halfWidth_IL =  max(IMGSIZE_REF_IL*par.sim.subvpix, 2*par.sim.subvpix)
+        centerArea = max((imgspace.center - halfWidth_IL + 1) , 1):1:min((imgspace.center + halfWidth_IL - 1), imgspace.xlen)
+
+        xL2length = length(centerArea[1]:imgspace.center)
+
+        triangleIndices = falses(xL2length, xL2length)
+
+        for X1 in 1:xL2length
+
+            triangleIndices[1:X1,X1] .= true
+
+        end
+
+        xL2normsq = ((( imgspace.x[centerArea[1]:imgspace.center]'.^2  .+
+        imgspace.y[centerArea[1]:imgspace.center].^2 ) .^0.5) ./ par.opt.M)
+
+        v = xL2normsq.*(par.con.k*sin(par.con.alpha))
+
+        u = 4*k*objspace.z[j]*(sin(par.con.alpha/2)^2)
+
+        Koi = par.opt.M/((par.opt.fobj*par.obj.lambda)^2)*exp(-im*u/(4*(sin(par.con.alpha/2)^2)))
+
+        I1 = complex(zeros(size(v)))
+
+        I1[triangleIndices] = intfxn(nodes,weights,0,alpha,v[triangleIndices],u)
+
+        I1[triangleIndices] .= I1[triangleIndices] .* Koi
+
+        copyto!(I1,Symmetric(I1))
+
+        pattern_stack[j] .= unfoldPattern(I1,pattern_stack[j])
+
+        originimgs[centerArea,centerArea,j] .= pattern_stack[j][:,:]
+    end
+    return
 end
 
 function itrfresnel_GPU!(originimgs, Ha0, steps)
@@ -128,48 +177,5 @@ function itrfresnel_GPU!(originimgs, Ha0, steps)
     return originimgs
 end
 
-function integratePSF(originimgs, pattern_stack, x3objspace, centerPT, fobj, lambda, alpha, M, dx, k0, k, a0)
-
-    for j in 1:length(x3objspace)
-
-        IMGSIZE_REF_IL = cld((IMGSIZE_REF*abs(x3objspace[j])),x3objmax)
-
-        halfWidth_IL =  max(IMGSIZE_REF_IL*subNnum, 2*subNnum)
-
-        centerArea = Int.(max((centerPT - halfWidth_IL + 1) , 1):1:min((centerPT + halfWidth_IL - 1) , x1_imgspacelength))
-
-        xL2length = length(centerArea[1]:centerPT)
-
-        triangleIndices = falses(xL2length, xL2length)
-
-        for X1 in 1:xL2length
-
-            triangleIndices[1:X1,X1] .= true
-
-        end
-
-        xL2normsq = ((( x1_imgspace[centerArea[1]:centerPT]'.^2  .+
-        x2_imgspace[centerArea[1]:centerPT].^2 ) .^0.5) ./M)
-
-        v = xL2normsq.*(k*sin(alpha))
-
-        u = 4*k*x3objspace[j]*(sin(alpha/2)^2)
-
-        Koi = M/((fobj*lambda)^2)*exp(-im*u/(4*(sin(alpha/2)^2)))
-
-        I1 = complex(zeros(size(v)))
-
-        I1[triangleIndices] = intfxn(nodes,weights,0,alpha,v[triangleIndices],u)
-
-        I1[triangleIndices] .= I1[triangleIndices] .* Koi
-
-        copyto!(I1,Symmetric(I1))
-
-        pattern_stack[j] .= unfoldPattern(I1,pattern_stack[j])
-
-        originimgs[centerArea,centerArea,j] .= pattern_stack[j][:,:]
-    end
-    return
-end
 
 end # module
