@@ -29,89 +29,34 @@ H = makeHmatrix(psfWAVE_STACK[:,:,1],subpixelpitch,d,k0,lambda)
 Hlayer = complex(zeros(size(MLARRAY,1),size(MLARRAY,2),imgsperlayer))
 Himgs = zeros(length(samples),length(samples), Nnum*Nnum*length(x3objspace))
 
-# First draft. You might be able to make it more concise...
-function shiftimg()
-    if x > 0
-        if y > 0
-            return @view
-        elseif y < 0
-            return @view
-        else
-            return @view
-        end
-    elseif x < 0
-        if y > 0
-            return @view
-        elseif y < 0
-            return @view
-        else
-            return @view
-        end
-    else
-        if y > 0
-            return @view
-        elseif y < 0
-            return @view
-        else
-            return @view
-        end
-    end
-end
-
-function ishiftimg()
-    if x > 0
-        if y > 0
-            return @view
-        elseif y < 0
-            return @view
-        else
-            return @view
-        end
-    elseif x < 0
-        if y > 0
-            return @view
-        elseif y < 0
-            return @view
-        else
-            return @view
-        end
-    else
-        if y > 0
-            return @view
-        elseif y < 0
-            return @view
-        else
-            return @view
-        end
-    end
-end
 
 println("Computing LF PSFs (2/3)")
 #NOTE: You can probably do this a lot simpler with careful/clever use of @view
-#       I started to hash out the idea below. Verify. Probably need if-else for
-# each shift case (positive, negative and zero). Could be a separate function that returns a view or range.
-for layer in 1:objspace.zlen
+for layer in 1:length(x3objspace)
     stackstart = 1 + (layer-1)*imgsperlayer
     stackend   = layer*imgsperlayer
     baseimg = psfWAVE_STACK[:,:,layer]
     for img in 1:imgsperlayer
 
-        @views stackbin .= shift(baseimg, SHIFTX, SHIFTY) .* ishift(MLARRAY, SHIFTX, SHIFTY)
+        stackbin = translate(baseimg, SHIFTX[img], SHIFTY[img], size(MLARRAY,1), size(MLARRAY,2))
+
+        stackbin = stackbin .* MLARRAY
 
         #Fresnel 2d one step size of b0
         fft2!(stackbin)
         stackbin = stackbin .* H
         ifft2!(stackbin)
 
-        @views finalbin .= abs2.(ishift(stackbin, SHIFTX, SHIFTY))
+        stackbin = translate(stackbin, -SHIFTX[img], -SHIFTY[img], size(MLARRAY,1), size(MLARRAY,2))
+        stackbin = abs2.(stackbin)
 
         "Non original code: addition of low pass filter before downsampling"
-        stackbin = conv(stackbin, sincfilter)[croppedrng, croppedrng]
+        stackbin = convolve2(stackbin, sincfilter)
 
         Hlayer[:,:,img] = stackbin
     end
     Himgs[:,:,stackstart:stackend] .= Hlayer[samples,samples,:]
-    println("Layer: " * string(layer) * " of " * string(objspace.zlen) * " complete.")
+    println("Layer: " * string(layer) * " of " * string(length(x3objspace)) * " complete.")
 end
 
 end # for loop timer
