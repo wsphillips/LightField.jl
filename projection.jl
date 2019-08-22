@@ -1,34 +1,100 @@
 module projection
 
-"These are scaling terms to convert array subscripts to obj space"
-XREF = cld(length(x1objspace),2)
-YREF = cld(length(x1objspace),2)
-Xidx = repeat(1:length(x1objspace), outer=(length(x2objspace)*length(x3objspace)))
-Yidx = repeat(1:length(x2objspace), inner=(length(x1objspace)*length(x3objspace)))
-Zidx = repeat(1:length(x3objspace), inner=(length(x1objspace)*length(x2objspace)))
+# First draft. You might be able to make it more concise...
+function shiftimg()
+    if x > 0
+        if y > 0
+            return @view
+        elseif y < 0
+            return @view
+        else
+            return @view
+        end
+    elseif x < 0
+        if y > 0
+            return @view
+        elseif y < 0
+            return @view
+        else
+            return @view
+        end
+    else
+        if y > 0
+            return @view
+        elseif y < 0
+            return @view
+        else
+            return @view
+        end
+    end
+end
 
-"For shifting the images relative to object space"
-SHIFTX = Float32.((Xidx.-XREF).*OSR)
-SHIFTY = Float32.((Yidx.-YREF).*OSR)
+function ishiftimg(Δx::Float64, Δy::Float64)
+    if  Δx > 0
+        if Δy > 0
+            return @view
+        elseif Δy < 0
+            return @view
+        else
+            return @view
+        end
+    elseif Δx < 0
+        if Δy > 0
+            return @view
+        elseif Δy < 0
+            return @view
+        else
+            return @view
+        end
+    else
+        if Δy > 0
+            return @view
+        elseif Δy < 0
+            return @view
+        else
+            return @view
+        end
+    end
+end
 
+function calcshift(obj::Space)
+    "These are scaling terms to convert array subscripts to obj space"
+    XREF = cld(obj.xlen,2)
+    YREF = cld(obj.xlen,2)
+    Xidx = repeat(1:obj.xlen, outer=(obj.ylen*obj.zlen))
+    Yidx = repeat(1:obj.ylen, inner=(obj.xlen*obj.zlen))
+    Zidx = repeat(1:obj.zlen, inner=(obj.xlen*obj.ylen))
+
+    "For shifting the images relative to object space"
+    SHIFTX = Float32.((Xidx.-XREF).*OSR)
+    SHIFTY = Float32.((Yidx.-YREF).*OSR)
+    return (SHIFTX, SHIFTY)
+end
+
+function smplpts()
 "Resampling points -- just to ensure the center point remains consistent"
 half1 = centerPT:-OSR:1
 half2 = (centerPT + OSR):OSR:x1_imgspacelength
 samples = vcat(half1,half2)
 sort!(samples)
+end
 
+function makesinc()
 "Make lowpass 2D sinc filter for preprocess step prior to resampling"
 sinc2d(x,y) = (sinc(x)*sinc(y))
 x1 = range(-2, stop=2, length=13) #NOTE THIS ASSUMES OSR OF 3!!!
 x2 = x1'
 sincfilter = sinc2d.(x1,x2).*0.330
+end
 
+
+function stackalloc()
 "Preallocation for image stacks"
 imgsperlayer = Nnum*Nnum
 H = makeHmatrix(psfWAVE_STACK[:,:,1],subpixelpitch,d,k0,lambda)
 Hlayer = complex(zeros(size(MLARRAY,1),size(MLARRAY,2),imgsperlayer))
 Himgs = zeros(length(samples),length(samples), Nnum*Nnum*length(x3objspace))
-
+end
 
 println("Computing LF PSFs (2/3)")
 #NOTE: You can probably do this a lot simpler with careful/clever use of @view
