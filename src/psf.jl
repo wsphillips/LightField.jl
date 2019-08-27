@@ -84,6 +84,7 @@ function allocateStackMem(pattern_stack::Array{Array{Complex{Float64},2},1}, obj
     return
 end
 
+#TODO: static typing for unfoldPattern()
 function unfoldPattern(I1,pattern)
     middle = Int(cld(size(pattern,1),2))
     pattern[1:middle,1:middle] .= I1[:,:]
@@ -92,6 +93,7 @@ function unfoldPattern(I1,pattern)
     return pattern
 end
 
+#TODO: change name of function to not confuse with intpsf
 function integratePSF(originimgs::Array{Complex{Float64},3}, pattern_stack::Array{Array{Complex{Float64},2},1}, objspace::Space, imgspace::Space, par::ParameterSet)
     zmax = maximum(objspace.z)
     for j in 1:objspace.zlen
