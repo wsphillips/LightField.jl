@@ -4,7 +4,7 @@ using FFTW
 import SpecialFunctions.besselj
 import FastGaussQuadrature.gausslegendre
 import LinearAlgebra.Symmetric
-import .params.ParameterSet, .params.Space
+import LightField.params.ParameterSet, LightField.params.Space
 
 export integratePSF, fresnelH, originPSFproj
 

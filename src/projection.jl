@@ -2,7 +2,7 @@ module projection
 
 using FFTW
 using PaddedViews
-using .psf.fresnelH
+using LightField.psf.fresnelH
 
 export propagate
 

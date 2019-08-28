@@ -6,7 +6,7 @@ include("psfsize.jl")
 include("mla.jl")
 include("projection.jl")
 
-using .psf, .psfsize, .params, .mla, .projection
+using LightField.psf, LightField.psfsize, LightField.params, LightField.mla, LightField.projection
 export setup, calcsize, calcPSF, calcML, propagate
 
 end # module
