@@ -28,7 +28,7 @@ function psfline(x₁testline::Vector{Float64}, x₃max::Float64, M::Float64,
     linearpsf = complex(zeros(length(v)))
 
     Threads.@threads for i in 1:length(v)
-        @inbounds linearpsf[i] = intpsf(v[i], u, a₀, α) * Kₒ
+        @inbounds linearpsf[i] = integratePSF(v[i], u, a₀, α) * Kₒ
     end
 
     linearpsfmag = Float64.( abs2.(linearpsf) ./ maximum(abs2.(linearpsf)) )

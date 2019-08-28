@@ -3,7 +3,8 @@ module mla
 using DSP
 import LightField.params.ParameterSet, LightField.params.Space
 export calcML
-# TODO: Refactor this code.
+
+# TODO: Refactor this messy code. conv2() is deprecated
 
 function calcML(imgspace::Space, mlaspace::Space, par::ParameterSet)
 
@@ -28,7 +29,7 @@ function calcML(imgspace::Space, mlaspace::Space, par::ParameterSet)
     border = fld((size(MLARRAYfull,1) - imgspace.xlen),2) + 1
     croprange = Int.(border:(imgspace.xlen + (border-1)))
 
-    return MLARRAY = MLARRAYfull[croprange, croprange]
+    return MLARRAYfull[croprange, croprange]
 end
 
 end # module
