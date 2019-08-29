@@ -2,8 +2,8 @@ module projection
 
 using FFTW
 using PaddedViews
-using LightField.psf.fresnelH
-
+import LightField.psf.fresnelH
+import LightField.params.ParameterSet, LightField.params.Space
 export propagate
 
 "Image translation using PaddedViews"
@@ -35,6 +35,24 @@ function shiftimg(img::Union{Array{Complex{Float64},2},Array{Float64,2}},
         end
     end
 end
+
+function shiftimg!(dest::Union{Array{Complex{Float64},3},Array{Float64,3}},
+                   img::Union{Array{Complex{Float64},2},Array{Float64,2}},
+                            Δx::Array{Int64,1}, Δy::Array{Int64,1})
+    for i in 1:size(img,3)
+        @inbounds dest[:,:,i] .= shiftimg(img, Δx[i], Δy[i])
+    end
+end
+
+function shiftimg!(dest::Union{Array{Complex{Float64},3},Array{Float64,3}},
+                   img::Union{Array{Complex{Float64},3},Array{Float64,3}},
+                            Δx::Array{Int64,1}, Δy::Array{Int64,1})
+    for i in 1:size(img,3)
+        @inbounds dest[:,:,i] .= shiftimg(img[:,:,i], Δx[i], Δy[i])
+    end
+end
+
+
 
 """Calculate translation coordinates for each point in object space with respect
 to the origin"""
@@ -72,18 +90,18 @@ function initprop(originpsf::Array{Complex{Float64},3},
                                       mla::Space,obj::Space,par::ParameterSet)
     imgsperlayer = par.sim.vpix^2
     H = fresnelH(originpsf[:,:,1], par, par.opt.d)
-    Himgs = zeros(mla.xlen, mla.ylen, imgsperlayer*objspace.zlen)
+    Himgs = zeros(mla.xlen, mla.ylen, imgsperlayer*obj.zlen)
     Himgtemp = zeros(Complex{Float64}, mla.xlen, mla.ylen, imgsperlayer)
 
     FFTW.set_num_threads(Threads.nthreads())
-    plan = plan_fft!(Htemp,[1,2], flags=FFTW.MEASURE)
+    plan = plan_fft!(Himgtemp,[1,2], flags=FFTW.MEASURE)
 
     return (imgsperlayer, H, Himgtemp, Himgs, plan)
 end
 
 "Performs Fresnel propagation via 2D Fourier space convolution"
-function fresnelconv!(plan, images::Array{Complex{Float64,3}},
-                            H::Array{Complex{Float64,2}})
+function fresnelconv!(plan, images::Array{Complex{Float64},3},
+                            H::Array{Complex{Float64},2})
     plan*images
     images .= images .* H
     plan\images
@@ -99,17 +117,19 @@ end
 
 function lfconvprop!(originpsf::Array{Complex{Float64},3},
                      mlarray::Array{Complex{Float64},2},
-                     SHIFTX::Array{Int64,1}, SHIFTY::Array{Int64, 1},
+                     SHIFTX::Array{Int64,1}, SHIFTY::Array{Int64,1},
                      obj::Space, imgsperlayer::Int64,
                      H::Array{Complex{Float64},2},
                      Himgtemp::Array{Complex{Float64},3},
-                     Himgs::Array{Complex{Float64},3}, plan::FFTW.cFFTWPlan)
+                     Himgs::Array{Float64,3}, plan::FFTW.cFFTWPlan{Complex{Float64},-1,true,3})
 
     for layer in 1:obj.zlen
         (cstart,cend) = chunks(layer,imgsperlayer)
-        @views Himgtemp .= shift.(originpsf[:,:,layer],SHIFTX,SHIFTY) .* mlarray
+        shiftimg!(Himgtemp,originpsf[:,:,layer],SHIFTX[cstart:cend],SHIFTY[cstart:cend])
+        Himgtemp .=  Himgtemp .* mlarray
         fourierconv!(plan, Himgtemp, H)
-        @views Himgs[:,:,cstart:cend] .= abs2.(shift.(Himgtemp,-SHIFTX,-SHIFTY))
+        shiftimg!(Himgtemp,Himgtemp,-SHIFTX[cstart:cend],-SHIFTY[cstart:cend])
+        Himgs[:,:,cstart:cend] .= abs2.(Himgtemp)
     end
     return
 end

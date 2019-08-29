@@ -56,7 +56,7 @@ end
 
 function originPSFproj(img::Space, obj::Space, par::ParameterSet)
 
-    originPSFalloc(pattern_stack, obj, img, par)
+    (pattern_stack, originimgs) = originPSFalloc(obj, img, par)
     originPSFproj(originimgs, pattern_stack, obj, img, par)
 
     #This is what happens when Shu Jia lab super resolution is applied
@@ -71,7 +71,7 @@ function originPSFproj(img::Space, obj::Space, par::ParameterSet)
 end
 
 #TODO: Clean this up
-function originPSFalloc(pattern_stack::Array{Array{Complex{Float64},2},1}, obj::Space, img::Space, par::ParameterSet)
+function originPSFalloc(obj::Space, img::Space, par::ParameterSet)
     zmax = maximum(obj.z)
     pattern_stack = Array{Array{Complex{Float64},2},1}(undef, obj.zlen)
     originimgs = complex(zeros(img.xlen,img.ylen,obj.zlen))
@@ -82,7 +82,7 @@ function originPSFalloc(pattern_stack::Array{Array{Complex{Float64},2},1}, obj::
         pattern_stack[p] = complex(zeros(Float64, length(centerArea), length(centerArea)))
     end
 
-    return
+    return (pattern_stack, originimgs)
 end
 
 #TODO: cleanup + static typing for unfoldPattern()
