@@ -6,6 +6,18 @@ import LightField.psf.fresnelH
 import LightField.params.ParameterSet, LightField.params.Space
 export propagate
 
+function parimgmul!(imgs::Union{Array{Complex{Float64},3},Array{Float64,3}}, kernel::Union{Array{Complex{Float64},2},Array{Float64,2}})
+
+    Threads.@threads for i in 1:size(imgs,3)
+        @views @inbounds imgs[:,:,i] .= imgs[:,:,i] .* kernel
+    end
+end
+
+function parpsfmag!(dest::Array{Float64,3}, psfimgs::Array{Complex{Float64},3})
+    Threads.@threads for i in 1:size(dest,3)
+        @views @inbounds dest[:,:,i] .= abs2.(psfimgs[:,:,i])
+    end
+end
 "Image translation using PaddedViews"
 function shiftimg(img::Union{Array{Complex{Float64},2},Array{Float64,2}},
                                                     Δx::Int64, Δy::Int64)
@@ -39,7 +51,7 @@ end
 function shiftimg!(dest::Union{Array{Complex{Float64},3},Array{Float64,3}},
                    img::Union{Array{Complex{Float64},2},Array{Float64,2}},
                             Δx::Array{Int64,1}, Δy::Array{Int64,1})
-    for i in 1:size(img,3)
+    Threads.@threads for i in 1:size(dest,3)
         @inbounds dest[:,:,i] .= shiftimg(img, Δx[i], Δy[i])
     end
 end
@@ -47,12 +59,10 @@ end
 function shiftimg!(dest::Union{Array{Complex{Float64},3},Array{Float64,3}},
                    img::Union{Array{Complex{Float64},3},Array{Float64,3}},
                             Δx::Array{Int64,1}, Δy::Array{Int64,1})
-    for i in 1:size(img,3)
+    Threads.@threads for i in 1:size(dest,3)
         @inbounds dest[:,:,i] .= shiftimg(img[:,:,i], Δx[i], Δy[i])
     end
 end
-
-
 
 """Calculate translation coordinates for each point in object space with respect
 to the origin"""
@@ -90,10 +100,10 @@ function initprop(originpsf::Array{Complex{Float64},3},
                                       mla::Space,obj::Space,par::ParameterSet)
     imgsperlayer = par.sim.vpix^2
     H = fresnelH(originpsf[:,:,1], par, par.opt.d)
-    Himgs = zeros(mla.xlen, mla.ylen, imgsperlayer*obj.zlen)
-    Himgtemp = zeros(Complex{Float64}, mla.xlen, mla.ylen, imgsperlayer)
+    Himgs = zeros(cld(size(originpsf,1),par.sim.osr), cld(size(originpsf,1),par.sim.osr), imgsperlayer*obj.zlen)
+    Himgtemp = zeros(Complex{Float64}, size(originpsf,1), size(originpsf,1), imgsperlayer)
 
-    FFTW.set_num_threads(Threads.nthreads())
+    FFTW.set_num_threads(fld(Threads.nthreads(),2))
     plan = plan_fft!(Himgtemp,[1,2], flags=FFTW.MEASURE)
 
     return (imgsperlayer, H, Himgtemp, Himgs, plan)
@@ -103,7 +113,7 @@ end
 function fresnelconv!(plan, images::Array{Complex{Float64},3},
                             H::Array{Complex{Float64},2})
     plan*images
-    images .= images .* H
+    parimgmul!(images,H)
     plan\images
     return
 end
@@ -118,29 +128,30 @@ end
 function lfconvprop!(originpsf::Array{Complex{Float64},3},
                      mlarray::Array{Complex{Float64},2},
                      SHIFTX::Array{Int64,1}, SHIFTY::Array{Int64,1},
-                     obj::Space, imgsperlayer::Int64,
+                     img::Space, obj::Space, par::ParameterSet, imgsperlayer::Int64,
                      H::Array{Complex{Float64},2},
                      Himgtemp::Array{Complex{Float64},3},
                      Himgs::Array{Float64,3}, plan::FFTW.cFFTWPlan{Complex{Float64},-1,true,3})
 
+        samples = sample(img, par)
     for layer in 1:obj.zlen
         (cstart,cend) = chunks(layer,imgsperlayer)
         shiftimg!(Himgtemp,originpsf[:,:,layer],SHIFTX[cstart:cend],SHIFTY[cstart:cend])
-        Himgtemp .=  Himgtemp .* mlarray
-        fourierconv!(plan, Himgtemp, H)
+        parimgmul!(Himgtemp,mlarray)
+        fresnelconv!(plan, Himgtemp, H)
         shiftimg!(Himgtemp,Himgtemp,-SHIFTX[cstart:cend],-SHIFTY[cstart:cend])
-        Himgs[:,:,cstart:cend] .= abs2.(Himgtemp)
+        parpsfmag!(Himgs[:,:,cstart:cend],Himgtemp[samples,samples,:])
     end
     return
 end
 
 function propagate(originpsf::Array{Complex{Float64},3},
                      mlarray::Array{Complex{Float64},2},
-                     mla::Space, obj::Space, par::ParameterSet)
+                     mla::Space, img::Space, obj::Space, par::ParameterSet)
 
     (SHIFTX,SHIFTY,Zidx) = calcshifts(obj,par)
     (imgsperlayer,H,Himgtemp,Himgs,plan) = initprop(originpsf,mla,obj,par)
-    lfconvprop!(originpsf, mlarray, SHIFTX, SHIFTY, obj, imgsperlayer, H,
+    lfconvprop!(originpsf, mlarray, SHIFTX, SHIFTY, img, obj, par, imgsperlayer, H,
                                                     Himgtemp, Himgs, plan)
 
     # phasespace()

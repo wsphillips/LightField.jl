@@ -75,7 +75,7 @@ function originPSFalloc(obj::Space, img::Space, par::ParameterSet)
     zmax = maximum(obj.z)
     pattern_stack = Array{Array{Complex{Float64},2},1}(undef, obj.zlen)
     originimgs = complex(zeros(img.xlen,img.ylen,obj.zlen))
-    for p in 1:obj.zlen
+    Threads.@threads for p in 1:obj.zlen
         IMGSIZE_REF_IL = cld((img.xlen*abs(obj.z[p])),zmax)
         halfWidth_IL =  max(IMGSIZE_REF_IL*par.sim.subvpix, 2*par.sim.subvpix)
         centerArea = max((img.center - halfWidth_IL + 1) , 1):1:min((img.center + halfWidth_IL - 1), img.xlen)
@@ -97,7 +97,7 @@ end
 #TODO: cleanup
 function originPSFproj(originimgs::Array{Complex{Float64},3}, pattern_stack::Array{Array{Complex{Float64},2},1}, obj::Space, img::Space, par::ParameterSet)
     zmax = maximum(obj.z)
-    for j in 1:obj.zlen
+    Threads.@threads for j in 1:obj.zlen
 
         IMGSIZE_REF_IL = cld((img.xlen*abs(obj.z[j])),zmax)
         halfWidth_IL =  max(IMGSIZE_REF_IL*par.sim.subvpix, 2*par.sim.subvpix)
@@ -117,7 +117,7 @@ function originPSFproj(originimgs::Array{Complex{Float64},3}, pattern_stack::Arr
         Koi = par.opt.M/((par.opt.fobj*par.opt.lambda)^2)*exp(-im*u/(4*(sin(par.con.alpha/2)^2)))
 
         I1 = complex(zeros(size(v)))
-        I1[triangleIndices] = integratePSF.(v[triangleIndices],u,par.opt.a0, par.con.alpha)
+        I1[triangleIndices] .= integratePSF.(v[triangleIndices],u,par.opt.a0, par.con.alpha)
         I1[triangleIndices] .= I1[triangleIndices] .* Koi
         copyto!(I1,Symmetric(I1))
 
@@ -131,7 +131,7 @@ function itrfresnelconv!(originimgs::Array{Complex{Float64},3}, Ha0::Array{Compl
     f0 = originimgs[:,:,1]
     p = plan_fft!(f0, [1,2])
     invp = inv(p)
-    for h in 1:length(obj.z)
+    Threads.@threads for h in 1:length(obj.z)
         f0 .= originimgs[:,:,h]
         # Fourier space computation
         p*f0                        # Applies fft in place
