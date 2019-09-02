@@ -20,30 +20,32 @@ function parpsfmag!(dest::Array{Float64,3}, psfimgs::Array{Complex{Float64},3})
 end
 "Image translation using PaddedViews"
 function shiftimg(img::Union{Array{Complex{Float64},2},Array{Float64,2}},
-                                                    Δx::Int64, Δy::Int64)
-    if  Δx > 0
-        if Δy > 0
-            return PaddedView(0, img[1+Δy:end, 1:end-Δx], size(img), (1, 1+Δx))
-        elseif Δy < 0
-            return PaddedView(0, img[1:end+Δy, 1:end-Δx], size(img), (1-Δy, 1+Δx))
+    Δx::Int64, Δy::Int64)
+    @views begin
+        if  Δx > 0
+            if Δy > 0
+                return PaddedView(0, img[1+Δy:end, 1:end-Δx], size(img), (1, 1+Δx))
+            elseif Δy < 0
+                return PaddedView(0, img[1:end+Δy, 1:end-Δx], size(img), (1-Δy, 1+Δx))
+            else
+                return PaddedView(0, img[:, 1:end-Δx], size(img), (1, 1+Δx))
+            end
+        elseif Δx < 0
+            if Δy > 0
+                return PaddedView(0, img[1+Δy:end, 1-Δx:end], size(img))
+            elseif Δy < 0
+                return PaddedView(0, img[1:end+Δy, 1-Δx:end], size(img), (1-Δy, 1))
+            else
+                return PaddedView(0, img[:, 1-Δx:end], size(img))
+            end
         else
-            return PaddedView(0, img[:, 1:end-Δx], size(img), (1, 1+Δx))
-        end
-    elseif Δx < 0
-        if Δy > 0
-            return PaddedView(0, img[1+Δy:end, 1-Δx:end], size(img))
-        elseif Δy < 0
-            return PaddedView(0, img[1:end+Δy, 1-Δx:end], size(img), (1-Δy, 1))
-        else
-            return PaddedView(0, img[:, 1-Δx:end], size(img))
-        end
-    else
-        if Δy > 0
-            return PaddedView(0, img[1+Δy:end, :], size(img))
-        elseif Δy < 0
-            return PaddedView(0, img[1:end+Δy, :], size(img), (1-Δy, 1))
-        else
-            return PaddedView(0, img[:,:], size(img))
+            if Δy > 0
+                return PaddedView(0, img[1+Δy:end, :], size(img))
+            elseif Δy < 0
+                return PaddedView(0, img[1:end+Δy, :], size(img), (1-Δy, 1))
+            else
+                return PaddedView(0, img[:,:], size(img))
+            end
         end
     end
 end
@@ -60,7 +62,7 @@ function shiftimg!(dest::Union{Array{Complex{Float64},3},Array{Float64,3}},
                    img::Union{Array{Complex{Float64},3},Array{Float64,3}},
                             Δx::Array{Int64,1}, Δy::Array{Int64,1})
     Threads.@threads for i in 1:size(dest,3)
-        @inbounds dest[:,:,i] .= shiftimg(img[:,:,i], Δx[i], Δy[i])
+        @views @inbounds dest[:,:,i] .= shiftimg(img[:,:,i], Δx[i], Δy[i])
     end
 end
 
@@ -70,8 +72,8 @@ function calcshifts(obj::Space, par::ParameterSet)
     "These are scaling terms to convert array subscripts to obj space"
     XREF = obj.center
     YREF = XREF
-    Xidx = repeat(1:obj.xlen, outer=(obj.ylen*obj.zlen))
-    Yidx = repeat(1:obj.ylen, inner=(obj.xlen*obj.zlen))
+    Xidx = repeat(1:obj.xlen, inner=obj.ylen)
+    Yidx = repeat(obj.ylen:1, outer=obj.xlen)
     Zidx = repeat(1:obj.zlen, inner=(obj.xlen*obj.ylen))
 
     "For shifting the images relative to object space"
@@ -136,10 +138,10 @@ function lfconvprop!(originpsf::Array{Complex{Float64},3},
         samples = sample(img, par)
     for layer in 1:obj.zlen
         (cstart,cend) = chunks(layer,imgsperlayer)
-        shiftimg!(Himgtemp,originpsf[:,:,layer],SHIFTX[cstart:cend],SHIFTY[cstart:cend])
+        shiftimg!(Himgtemp,originpsf[:,:,layer],SHIFTX,SHIFTY)
         parimgmul!(Himgtemp,mlarray)
         fresnelconv!(plan, Himgtemp, H)
-        shiftimg!(Himgtemp,Himgtemp,-SHIFTX[cstart:cend],-SHIFTY[cstart:cend])
+        shiftimg!(Himgtemp,Himgtemp,-SHIFTX,-SHIFTY)
         parpsfmag!(Himgs[:,:,cstart:cend],Himgtemp[samples,samples,:])
     end
     return
