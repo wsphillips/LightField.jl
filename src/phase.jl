@@ -1,42 +1,29 @@
 module phasespace
 
-% Realignment H to phase_space PSF
-IMGsize=size(H,1)-mod((size(H,1)-Nnum),2*Nnum);
-psf =zeros(IMGsize,IMGsize,Nnum,Nnum,size(H,5));
-for z=1:size(H,5)
+#something like this
 
-    LFtmp=Hlayer #without second shift
-    # use A = reshape(permutedims(a, [3,2,1]), (Nnum,Nnum,lenslets,:)) to do in one line
-    multiWDF=zeros(Nnum,Nnum,size(LFtmp,1)/size(H,3),size(LFtmp,2)/size(H,4),Nnum,Nnum);
-    for i=1:Nnum
-        for j=1:Nnum
-            for a=1:lenslets
-                for b=1:lenslets
-                    multiWDF(i,j,a,b,:,:)=LFtmp((a-1)*Nnum+i, (b-1)*Nnum+j , :);
-                end
-            end
+function lfphase!(Himgtemp::AbstractArray, par::ParameterSet)
+
+    multiWDF = zeros(Nnumy, Nnumx, lensletsy, lensletsx, Nnum, Nnum)
+    for i in 1:par.sim.vpix, j in 1:par.sim.vpix
+        bylenslets = @view(Himgtemp[i:par.sim.vpix:end, j:par.sim.vpix:end, :])
+        for a in 1:lenslets, b in 1: lenslets
+            multiWDF[i, j, a, b, :, :] .= reshape(@view(bylenslets[a,b,:]), (par.sim.vpix, par.sim.vpix))
         end
     end
 
-    WDF=zeros(  size(LFtmp,1),size(LFtmp,2),Nnum,Nnum  );
-    for a=1:size(LFtmp,1)/size(H,3)
-        for c=1:Nnum
-            x=Nnum*a+1-c;
-            for b=1:size(LFtmp,2)/size(H,4)
-                for d=1:Nnum
-                    y=Nnum*b+1-d;
-                    WDF(x,y,:,:)=multiWDF(:,:,a,b,c,d);
-                end
+    for a in 1:lenslets, i in 1:Nnum
+            x = Nnum * a + 1 - i;
+            for b in 1:lenslets, j in 1:Nnum
+                    y = Nnum * b + 1 - j;
+                    @views Himgtemp[x, y, :, :] .= multiWDF[:, :, a, b, i, j];
             end
-        end
     end
-    psf(:,:,:,:,z)=WDF;
-end
-psf_t=zeros(size(psf)); # psf_t is psf/phase space Himgs with each image rotated 180 degrees
-for ii=1:Nnum
-    for jj=1:Nnum
-        for cc=1:size(psf,5)
-            psf_t(:,:,ii,jj,cc)=rot90(squeeze(psf(:,:,ii,jj,cc)),2 );
-        end
+
+    for i in 1:par.sim.vpix, j in 1:par.sim.vpix
+        Himgtemp[:,:,i,j] .= rot180(Himgtemp[:,:,i,j])
     end
+
+    Himgs[:,:,:,:,z] .= Himgtemp
+
 end
