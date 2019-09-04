@@ -137,12 +137,14 @@ function lfconvprop!(originpsf::Array{Complex{Float64},3},
 
         samples = sample(img, par)
     for layer in 1:obj.zlen
-        (cstart,cend) = chunks(layer,imgsperlayer)
+        #TODO: layer "chunks" deprecated in favor of tradition 5D matrix
         shiftimg!(Himgtemp,originpsf[:,:,layer],SHIFTX,SHIFTY)
         parimgmul!(Himgtemp,mlarray)
         fresnelconv!(plan, Himgtemp, H)
-        shiftimg!(Himgtemp,Himgtemp,-SHIFTX,-SHIFTY)
-        parpsfmag!(Himgs[:,:,cstart:cend],Himgtemp[samples,samples,:])
+        #sinc filter..via FFT before power conversion???
+        #abs2 of images via parpsfmag!()
+        #downsample
+        #phase space conversion via index reassignment
     end
     return
 end

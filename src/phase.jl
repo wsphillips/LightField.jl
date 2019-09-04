@@ -2,28 +2,28 @@ module phasespace
 
 #something like this
 
-function lfphase!(Himgtemp::AbstractArray, par::ParameterSet)
+function lfphase!(Himgtemp::AbstractArray, Himgtransformed::AbstractArray, multiWDF::AbstractArray, par::ParameterSet)
 
-    multiWDF = zeros(Nnumy, Nnumx, lensletsy, lensletsx, Nnum, Nnum)
-    for i in 1:par.sim.vpix, j in 1:par.sim.vpix
-        bylenslets = @view(Himgtemp[i:par.sim.vpix:end, j:par.sim.vpix:end, :])
+    N = par.sim.vpix
+    
+    Threads.@threads for i in 1:N, j in 1:N
+        bylenslets = @view(Himgtemp[i:N:end, j:N:end, :])
         for a in 1:lenslets, b in 1: lenslets
-            multiWDF[i, j, a, b, :, :] .= reshape(@view(bylenslets[a,b,:]), (par.sim.vpix, par.sim.vpix))
+            multiWDF[i, j, a, b, :, :] .= reshape(@view(bylenslets[a,b,:]), (N,N))
         end
     end
 
-    for a in 1:lenslets, i in 1:Nnum
-            x = Nnum * a + 1 - i;
-            for b in 1:lenslets, j in 1:Nnum
-                    y = Nnum * b + 1 - j;
-                    @views Himgtemp[x, y, :, :] .= multiWDF[:, :, a, b, i, j];
+    Threads.@threads for a in 1:lenslets, i in 1:N
+            x = N * a + 1 - i;
+            for b in 1:lenslets, j in 1:N
+                    y = N * b + 1 - j;
+                    @views Himgtransformed[x, y, :, :] .= multiWDF[:, :, a, b, i, j];
             end
     end
 
-    for i in 1:par.sim.vpix, j in 1:par.sim.vpix
-        Himgtemp[:,:,i,j] .= rot180(Himgtemp[:,:,i,j])
+    Threads.@threads for i in 1:N, j in 1:N
+        Himgtransformed[:,:,i,j] .= rot180(Himgtransformed[:,:,i,j])
     end
 
-    Himgs[:,:,:,:,z] .= Himgtemp
-
+    return
 end
