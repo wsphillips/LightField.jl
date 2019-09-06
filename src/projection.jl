@@ -96,11 +96,10 @@ end
 
 """Makes lowpass 2D sinc kernel for filtering prior to 3x downsampling.
 This might be improved by using separable kernel"""
-function sinc2d()
-    sinc2d(x,y) = (sinc(x)*sinc(y))
-    x1 = range(-2, stop=2, length=13) #NOTE THIS ASSUMES OSR OF 3!!!
-    x2 = x1'
-    return sinc2d.(x1,x2).*0.330
+function sinc1d()
+    x = range(-2, stop=2, length=13) #NOTE THIS ASSUMES OSR OF 3!!!
+    scale = sum(sinc.(x))
+    return sinc.(x) ./ scale
 end
 
 "Preallocation routine for propagation image stacks"
@@ -109,11 +108,13 @@ function initprop(originpsf::Array{Complex{Float64},3}, samples::Vector{Int64},
     N = par.sim.vpix
     lenslets = fld(length(samples),N)
     imgsperlayer = N^2
+
     H = fresnelH(originpsf[:,:,1], par, par.opt.d)
     Himgs = zeros(length(samples), length(samples), N, N, obj.zlen)
     Htemp = zeros(Complex{Float64}, size(originpsf,1), size(originpsf,1), imgsperlayer)
-    Htransform = zeros( )
+    Hfilt = zeros(length(samples), length(samples), imgsperlayer)
     multiWDF = zeros(N, N, lenslets, lenslets, N, N)
+
     FFTW.set_num_threads(fld(Threads.nthreads(),2))
     plan = plan_fft!(Htemp,[1,2], flags=FFTW.MEASURE)
 
@@ -129,11 +130,17 @@ function fresnelconv!(plan, images::Array{Complex{Float64},3},
     return
 end
 
-"Returns linear indices corresponding to all XY images within each Z-layer"
-function chunks(layer::Int64, imgsperlayer::Int64)
-    cstart = 1 + (layer-1)*imgsperlayer
-    cend   = layer*imgsperlayer
-    return (cstart, cend)
+function downsample!(Hsub::SubArray, Hfilt::Array{Float64,3}, sinckern::Array{Float64,1}, samples::Array{Int64,1}, par::ParameterSet)
+
+        N = par.sim.vpix
+        hview = reshape(view(Hfilt,:), (size(Hfilt,1), size(Hfilt,1), N, N))
+
+        Threads.@threads for i in 1:N, j in 1:N
+            a = @view conv(sinckern,sinckern, hview[:,:,i,j])[6:end-6,6:end-6]
+            Hsub[:,:,i,j] = @view a[samples,samples]
+        end
+
+    return
 end
 
 function lfconvprop!(originpsf::Array{Complex{Float64},3},
@@ -142,19 +149,19 @@ function lfconvprop!(originpsf::Array{Complex{Float64},3},
                      img::Space, obj::Space, par::ParameterSet, imgsperlayer::Int64,
                      H::Array{Complex{Float64},2},
                      Htemp::Array{Complex{Float64},3},
-                     Himgs::Array{Float64,3}, plan::FFTW.cFFTWPlan{Complex{Float64},-1,true,3})
+                     Himgs::Array{Float64,5}, plan::FFTW.cFFTWPlan{Complex{Float64},-1,true,3})
 
-        samples = sample(img, par)
+        sinckern = sinc1d()
     for layer in 1:obj.zlen
         #TODO: layer "chunks" deprecated in favor of tradition 5D matrix
+        layerview = @view Himgs[:,:,:,:,layer]
         shiftimg!(Himgtemp,originpsf[:,:,layer],SHIFTX,SHIFTY)
         parimgmul!(Himgtemp,mlarray)
         fresnelconv!(plan, Himgtemp, H)
-        parpsfmag!(dest, Himgtemp)
-        Himgs[:,:,:,:,layer] .= downsample(dest, sinc1dfilt, samples)
-        #sinc filter..via FFT before power conversion???
-        #abs2 of images via parpsfmag!()
-        #downsample
+        parpsfmag!(Hprefilt, Himgtemp)
+        downsample!(layerview,Hprefilt, sinckern, samples, par)
+        lfphase!(layerview, Himgtform, multiWDF, par, img)
+
         #phase space conversion via index reassignment
     end
     return
@@ -199,3 +206,14 @@ end
 =#
 
 end # end projection module
+
+# example scratch
+#= this allows logical reassignment of a view. Using the vectorized broadcast 
+# would instead return an allocated array.
+# This modifies the parent and preserves the view + still fast to do.
+for i in eachindex(viewa)
+    if viewa[i] < 0.5
+        viewa[i] = 0
+    end
+end
+=#
