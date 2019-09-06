@@ -98,17 +98,20 @@ function sinc2d()
 end
 
 "Preallocation routine for propagation image stacks"
-function initprop(originpsf::Array{Complex{Float64},3},
+function initprop(originpsf::Array{Complex{Float64},3}, samples::Vector{Int64},
                                       mla::Space,obj::Space,par::ParameterSet)
-    imgsperlayer = par.sim.vpix^2
+    N = par.sim.vpix
+    lenslets = fld(length(samples),N)
+    imgsperlayer = N^2
     H = fresnelH(originpsf[:,:,1], par, par.opt.d)
-    Himgs = zeros(cld(size(originpsf,1),par.sim.osr), cld(size(originpsf,1),par.sim.osr), imgsperlayer*obj.zlen)
-    Himgtemp = zeros(Complex{Float64}, size(originpsf,1), size(originpsf,1), imgsperlayer)
-
+    Himgs = zeros(length(samples), length(samples), N, N, obj.zlen)
+    Htemp = zeros(Complex{Float64}, size(originpsf,1), size(originpsf,1), imgsperlayer)
+    Htransform = zeros( )
+    multiWDF = zeros(N, N, lenslets, lenslets, N, N)
     FFTW.set_num_threads(fld(Threads.nthreads(),2))
-    plan = plan_fft!(Himgtemp,[1,2], flags=FFTW.MEASURE)
+    plan = plan_fft!(Htemp,[1,2], flags=FFTW.MEASURE)
 
-    return (imgsperlayer, H, Himgtemp, Himgs, plan)
+    return (imgsperlayer, H, Htemp, Himgs, plan)
 end
 
 "Performs Fresnel propagation via 2D Fourier space convolution"
@@ -132,15 +135,15 @@ function lfconvprop!(originpsf::Array{Complex{Float64},3},
                      SHIFTX::Array{Int64,1}, SHIFTY::Array{Int64,1},
                      img::Space, obj::Space, par::ParameterSet, imgsperlayer::Int64,
                      H::Array{Complex{Float64},2},
-                     Himgtemp::Array{Complex{Float64},3},
+                     Htemp::Array{Complex{Float64},3},
                      Himgs::Array{Float64,3}, plan::FFTW.cFFTWPlan{Complex{Float64},-1,true,3})
 
         samples = sample(img, par)
     for layer in 1:obj.zlen
         #TODO: layer "chunks" deprecated in favor of tradition 5D matrix
-        shiftimg!(Himgtemp,originpsf[:,:,layer],SHIFTX,SHIFTY)
-        parimgmul!(Himgtemp,mlarray)
-        fresnelconv!(plan, Himgtemp, H)
+        shiftimg!(Htemp,originpsf[:,:,layer],SHIFTX,SHIFTY)
+        parimgmul!(Htemp,mlarray)
+        fresnelconv!(plan, Htemp, H)
         #sinc filter..via FFT before power conversion???
         #abs2 of images via parpsfmag!()
         #downsample
@@ -154,9 +157,9 @@ function propagate(originpsf::Array{Complex{Float64},3},
                      mla::Space, img::Space, obj::Space, par::ParameterSet)
 
     (SHIFTX,SHIFTY,Zidx) = calcshifts(obj,par)
-    (imgsperlayer,H,Himgtemp,Himgs,plan) = initprop(originpsf,mla,obj,par)
+    (imgsperlayer,H,Htemp,Himgs,plan) = initprop(originpsf,mla,obj,par)
     lfconvprop!(originpsf, mlarray, SHIFTX, SHIFTY, img, obj, par, imgsperlayer, H,
-                                                    Himgtemp, Himgs, plan)
+                                                    Htemp, Himgs, plan)
 
     # phasespace()
     # postprocess()
