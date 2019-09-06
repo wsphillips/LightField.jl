@@ -87,9 +87,15 @@ function sample(img::Space, par::ParameterSet)
     half1 = img.center:-par.sim.osr:1
     half2 = (img.center + par.sim.osr):par.sim.osr:img.xlen
     samples = vcat(half1,half2)
-    return sort!(samples)
+    sort!(samples)
+    while mod(length(samples),par.sim.vpix) > 0
+        global samples = samples[2:end-1]
+    end
+    return samples
 end
-"Makes lowpass 2D sinc kernel for filtering prior to 3x downsampling"
+
+"""Makes lowpass 2D sinc kernel for filtering prior to 3x downsampling.
+This might be improved by using separable kernel"""
 function sinc2d()
     sinc2d(x,y) = (sinc(x)*sinc(y))
     x1 = range(-2, stop=2, length=13) #NOTE THIS ASSUMES OSR OF 3!!!
@@ -141,9 +147,11 @@ function lfconvprop!(originpsf::Array{Complex{Float64},3},
         samples = sample(img, par)
     for layer in 1:obj.zlen
         #TODO: layer "chunks" deprecated in favor of tradition 5D matrix
-        shiftimg!(Htemp,originpsf[:,:,layer],SHIFTX,SHIFTY)
-        parimgmul!(Htemp,mlarray)
-        fresnelconv!(plan, Htemp, H)
+        shiftimg!(Himgtemp,originpsf[:,:,layer],SHIFTX,SHIFTY)
+        parimgmul!(Himgtemp,mlarray)
+        fresnelconv!(plan, Himgtemp, H)
+        parpsfmag!(dest, Himgtemp)
+        Himgs[:,:,:,:,layer] .= downsample(dest, sinc1dfilt, samples)
         #sinc filter..via FFT before power conversion???
         #abs2 of images via parpsfmag!()
         #downsample

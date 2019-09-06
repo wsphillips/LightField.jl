@@ -1,12 +1,13 @@
 module phasespace
 
-#something like this
+using Threads
+import LightField.params.ParameterSet, LightField.params.Space
 
-function lfphase!(Himgtemp::AbstractArray, Himgtransformed::AbstractArray, multiWDF::AbstractArray, par::ParameterSet)
+export lfphase!
+
+function lfphase!(Himgtemp::AbstractArray, Himgtform::AbstractArray, multiWDF::AbstractArray, par::ParameterSet, img::Space)
 
     N = par.sim.vpix
-
-
     Threads.@threads for i in 1:N, j in 1:N
         bylenslets = @view(Himgtemp[i:N:end, j:N:end, :])
         for a in 1:lenslets, b in 1: lenslets
@@ -18,12 +19,12 @@ function lfphase!(Himgtemp::AbstractArray, Himgtransformed::AbstractArray, multi
             x = N * a + 1 - i;
             for b in 1:lenslets, j in 1:N
                     y = N * b + 1 - j;
-                    @views Himgtransformed[x, y, :, :] .= multiWDF[:, :, a, b, i, j];
+                    @views Himgtform[x, y, :, :] .= multiWDF[:, :, a, b, i, j];
             end
     end
 
     Threads.@threads for i in 1:N, j in 1:N
-        Himgtransformed[:,:,i,j] .= rot180(Himgtransformed[:,:,i,j])
+        Himgtransform[:,:,i,j] .= rot180(Himgtransformed[:,:,i,j])
     end
 
     return
