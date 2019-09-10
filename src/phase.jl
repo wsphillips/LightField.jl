@@ -5,6 +5,7 @@ using ..params
 
 export lfphase!
 
+#TODO: Fix type declarations
 function lfphase!(Himgtemp::AbstractArray, Himgtform::AbstractArray, multiWDF::AbstractArray, par::ParameterSet, img::Space)
 
     N = par.sim.vpix
