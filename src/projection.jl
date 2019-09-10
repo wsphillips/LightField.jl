@@ -2,8 +2,10 @@ module projection
 
 using FFTW
 using PaddedViews
-import LightField.psf.fresnelH
+
 import LightField.params.ParameterSet, LightField.params.Space
+import LightField.psf.fresnelH
+import LightField.phasespace.lfphase!
 export propagate
 
 
@@ -96,7 +98,6 @@ function propagate(originpsf::Array{Complex{Float64},3},
     function lfconvprop!()
 
         function parimgmul!(imgs::Union{Array{Complex{Float64},3},Array{Float64,3}}, kernel::Union{Array{Complex{Float64},2},Array{Float64,2}})
-
             Threads.@threads for i in 1:size(imgs,3)
                 @views @inbounds imgs[:,:,i] .= imgs[:,:,i] .* kernel
             end
@@ -118,7 +119,6 @@ function propagate(originpsf::Array{Complex{Float64},3},
         end
 
         function downsample!(Hsub::SubArray)
-
             N = par.sim.vpix
             hview = reshape(view(Hprefilt,:), (size(Hprefilt,1), size(Hprefilt,2), N, N))
 
@@ -129,8 +129,6 @@ function propagate(originpsf::Array{Complex{Float64},3},
 
             return
         end
-
-###############################################################################
 
         sinckern = sinc1d()
         (SHIFTX,SHIFTY,Zidx) = calcshifts()
@@ -150,26 +148,23 @@ function propagate(originpsf::Array{Complex{Float64},3},
         return
     end
 
-################################################################################
-################################################################################
+    "Preallocation routine for propagation image stacks"
+    function initprop()
+        N = par.sim.vpix
+        lenslets = fld(length(samples),N)
+        imgsperlayer = N^2
 
-"Preallocation routine for propagation image stacks"
-function initprop()
-    N = par.sim.vpix
-    lenslets = fld(length(samples),N)
-    imgsperlayer = N^2
+        H = fresnelH(originpsf[:,:,1], par, par.opt.d)
+        Himgs = zeros(length(samples), length(samples), N, N, obj.zlen)
+        Htemp = zeros(Complex{Float64}, size(originpsf,1), size(originpsf,1), imgsperlayer)
+        Hfilt = zeros(length(samples), length(samples), imgsperlayer)
+        multiWDF = zeros(N, N, lenslets, lenslets, N, N)
 
-    H = fresnelH(originpsf[:,:,1], par, par.opt.d)
-    Himgs = zeros(length(samples), length(samples), N, N, obj.zlen)
-    Htemp = zeros(Complex{Float64}, size(originpsf,1), size(originpsf,1), imgsperlayer)
-    Hfilt = zeros(length(samples), length(samples), imgsperlayer)
-    multiWDF = zeros(N, N, lenslets, lenslets, N, N)
+        FFTW.set_num_threads(fld(Threads.nthreads(),2))
+        plan = plan_fft!(Htemp,[1,2], flags=FFTW.MEASURE)
 
-    FFTW.set_num_threads(fld(Threads.nthreads(),2))
-    plan = plan_fft!(Htemp,[1,2], flags=FFTW.MEASURE)
-
-    return (imgsperlayer, H, Htemp, Himgs, plan)
-end
+        return (imgsperlayer, H, Htemp, Himgs, plan)
+    end
 
     (imgsperlayer,H,Htemp,Himgs,plan) = initprop()
     lfconvprop!()
