@@ -3,7 +3,7 @@ module params
 using TOML
 
 export setup
-export ParameterSet, Space
+export ParameterSet, Space, LightField
 
 struct MicroLensArray
 
@@ -106,6 +106,33 @@ struct ParameterSet
     con::Constants
 end
 
+struct Space
+    x::Vector{Float64}
+    y::Vector{Float64}
+    z::Vector{Float64}
+    xlen::Int64
+    ylen::Int64
+    zlen::Int64
+    center::Int64
+    function Space(x=[0.0],y=[0.0],z=[0.0])
+        xlen = length(x)
+        ylen = length(y)
+        zlen = length(z)
+        center = cld(xlen, 2)
+        new(x,y,z,xlen,ylen,zlen,center)
+    end
+end
+
+struct LightField
+    par::ParameterSet
+    mla::MicroLensArray
+    img::Space
+    obj::Space
+    function LightField(par::ParameterSet, mla::Space, img::Space, obj::Space)
+        new(par, mla, img, obj)
+    end
+end
+
 function setup(filename::String)
 
     config = TOML.parsefile(filename)
@@ -116,9 +143,6 @@ function setup(filename::String)
     con = Constants(opt)
     par = ParameterSet(mla, opt, sim, con)
 
-    # TODO: flesh out space definitions here
-    # add halfwidth, centerpt? max?
-
     xobj = collect((sim.pixelpitch/opt.M) .* (-sim.vpix:1:sim.vpix))
     yobj = collect((sim.pixelpitch/opt.M) .* (-sim.vpix:1:sim.vpix))
     zobj = collect(sim.zmin:sim.zstep:sim.zmax)
@@ -127,32 +151,10 @@ function setup(filename::String)
                                                             sim.subpixelpitch)
     yml = collect((-(sim.subvpix-1)/2 : 1 : (sim.subvpix-1)/2) .*
                                                             sim.subpixelpitch)
-
-    # ...then image space is defined by psfsize functions
-
     objspace = Space(xobj, yobj, zobj)
     mlaspace = Space(xml, yml)
 
     return (par, objspace, mlaspace)
-end
-
-struct Space
-    # TODO: Decide if there should be more embedded parameters
-    x::Vector{Float64}
-    y::Vector{Float64}
-    z::Vector{Float64}
-    xlen::Int64
-    ylen::Int64
-    zlen::Int64
-    #new additions here
-    center::Int64
-    function Space(x=[0.0],y=[0.0],z=[0.0])
-        xlen = length(x)
-        ylen = length(y)
-        zlen = length(z)
-        center = cld(xlen, 2)
-        new(x,y,z,xlen,ylen,zlen,center)
-    end
 end
 
 

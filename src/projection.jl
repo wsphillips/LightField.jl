@@ -1,183 +1,190 @@
 module projection
 
-using FFTW
-using PaddedViews
-import LightField.psf.fresnelH
-import LightField.params.ParameterSet, LightField.params.Space
-export propagate
+using FFTW, PaddedViews
+using ..params, ..psf
 
+export propagate, HMatrix
 
-function propagate(originpsf::Array{Complex{Float64},3},
-                     mlarray::Array{Complex{Float64},2},
-                     mla::Space, img::Space, obj::Space, par::ParameterSet)
+struct Delta
+    x::Vector{Int64}
+    y::Vector{Int64}
 
-    "Image translation using PaddedViews"
-    function shiftimg(img::Union{Array{Complex{Float64},2},Array{Float64,2}},
-                                                         Δx::Int64, Δy::Int6)
-        @views begin
-            if  Δx > 0
-                if Δy > 0
-                    return PaddedView(0, img[1+Δy:end, 1:end-Δx], size(img), (1, 1+Δx))
-                elseif Δy < 0
-                    return PaddedView(0, img[1:end+Δy, 1:end-Δx], size(img), (1-Δy, 1+Δx))
-                else
-                    return PaddedView(0, img[:, 1:end-Δx], size(img), (1, 1+Δx))
-                end
-            elseif Δx < 0
-                if Δy > 0
-                    return PaddedView(0, img[1+Δy:end, 1-Δx:end], size(img))
-                elseif Δy < 0
-                    return PaddedView(0, img[1:end+Δy, 1-Δx:end], size(img), (1-Δy, 1))
-                else
-                    return PaddedView(0, img[:, 1-Δx:end], size(img))
-                end
-            else
-                if Δy > 0
-                    return PaddedView(0, img[1+Δy:end, :], size(img))
-                elseif Δy < 0
-                    return PaddedView(0, img[1:end+Δy, :], size(img), (1-Δy, 1))
-                else
-                    return PaddedView(0, img[:,:], size(img))
-                end
-            end
-        end
+    function Delta(lf::LightField)
+        obj = lf.obj
+        sim = lf.par.sim
+        offset = obj.center
+
+        xidx = repeat(1:obj.xlen, inner = obj.ylen)
+        yidx = repeat(obj.ylen:1, outer = obj.xlen)
+        deltax = Int64.((yidx .- offset) .* sim.osr)
+        deltay = Int64.((yidx .- offset) .* sim.osr)
+        new(deltax, deltay)
     end
-
-    function shiftimg!(dest::Union{Array{Complex{Float64},3},Array{Float64,3}},
-                        img::Union{Array{Complex{Float64},2},Array{Float64,2}})
-        Threads.@threads for i in 1:size(dest,3)
-            @inbounds dest[:,:,i] .= shiftimg(img, SHIFTX[i], SHIFTY[i])
-        end
-    end
-
-    function shiftimg!(dest::Union{Array{Complex{Float64},3},Array{Float64,3}},
-                        img::Union{Array{Complex{Float64},3},Array{Float64,3}})
-        Threads.@threads for i in 1:size(dest,3)
-            @views @inbounds dest[:,:,i] .= shiftimg(img[:,:,i], SHIFTX[i], SHIFTY[i])
-        end
-    end
-
-    """Calculate translation coordinates for each point in object space with respect
-    to the origin"""
-    function calcshifts()
-        "These are scaling terms to convert array subscripts to obj space"
-        XREF = obj.center
-        YREF = XREF
-        Xidx = repeat(1:obj.xlen, inner=obj.ylen)
-        Yidx = repeat(obj.ylen:1, outer=obj.xlen)
-        Zidx = repeat(1:obj.zlen, inner=(obj.xlen*obj.ylen))
-
-        "For shifting the images relative to object space"
-        SHIFTX = Int64.((Xidx.-XREF).*par.sim.osr)
-        SHIFTY = Int64.((Yidx.-YREF).*par.sim.osr)
-        return (SHIFTX, SHIFTY, Zidx)
-    end
-
-    "Manual sampling points--to ensure the center point remains consistent"
-    function sample()
-        half1 = img.center:-par.sim.osr:1
-        half2 = (img.center + par.sim.osr):par.sim.osr:img.xlen
-        samples = vcat(half1,half2)
-        sort!(samples)
-        while mod(length(samples),par.sim.vpix) > 0
-            global samples = samples[2:end-1]
-        end
-        return samples
-    end
-
-    """Makes lowpass 2D sinc kernel for filtering prior to 3x downsampling.
-    This might be improved by using separable kernel"""
-    function sinc1d()
-        x = range(-2, stop=2, length=13) #NOTE THIS ASSUMES OSR OF 3!!!
-        scale = sum(sinc.(x))
-        return sinc.(x) ./ scale
-    end
-
-    function lfconvprop!()
-
-        function parimgmul!(imgs::Union{Array{Complex{Float64},3},Array{Float64,3}}, kernel::Union{Array{Complex{Float64},2},Array{Float64,2}})
-
-            Threads.@threads for i in 1:size(imgs,3)
-                @views @inbounds imgs[:,:,i] .= imgs[:,:,i] .* kernel
-            end
-        end
-
-        function parpsfmag!(dest::Array{Float64,3}, psfimgs::Array{Complex{Float64},3})
-            Threads.@threads for i in 1:size(dest,3)
-                @views @inbounds dest[:,:,i] .= abs2.(psfimgs[:,:,i])
-            end
-        end
-
-        "Performs Fresnel propagation via 2D Fourier space convolution"
-        function fresnelconv!(images::Array{Complex{Float64},3},
-                                   H::Array{Complex{Float64},2})
-            plan*images
-            parimgmul!(images,H)
-            plan\images
-            return
-        end
-
-        function downsample!(Hsub::SubArray)
-
-            N = par.sim.vpix
-            hview = reshape(view(Hprefilt,:), (size(Hprefilt,1), size(Hprefilt,2), N, N))
-
-            Threads.@threads for i in 1:N, j in 1:N
-                a = @views conv(sinckern,sinckern, hview[:,:,i,j])[6:end-6,6:end-6]
-                Hsub[:,:,i,j] = view(a,samples,samples)
-            end
-
-            return
-        end
-
-###############################################################################
-
-        sinckern = sinc1d()
-        (SHIFTX,SHIFTY,Zidx) = calcshifts()
-
-        for layer in 1:obj.zlen
-            layerview = @view Himgs[:,:,:,:,layer]
-
-            shiftimg!(originpsf[:,:,layer])
-            parimgmul!(Himgtemp,mlarray)
-            fresnelconv!(Himgtemp, H)
-            parpsfmag!(Hprefilt, Himgtemp)
-            downsample!(layerview)
-            lfphase!(layerview)
-
-        end
-
-        return
-    end
-
-################################################################################
-################################################################################
-
-"Preallocation routine for propagation image stacks"
-function initprop()
-    N = par.sim.vpix
-    lenslets = fld(length(samples),N)
-    imgsperlayer = N^2
-
-    H = fresnelH(originpsf[:,:,1], par, par.opt.d)
-    Himgs = zeros(length(samples), length(samples), N, N, obj.zlen)
-    Htemp = zeros(Complex{Float64}, size(originpsf,1), size(originpsf,1), imgsperlayer)
-    Hfilt = zeros(length(samples), length(samples), imgsperlayer)
-    multiWDF = zeros(N, N, lenslets, lenslets, N, N)
-
-    FFTW.set_num_threads(fld(Threads.nthreads(),2))
-    plan = plan_fft!(Htemp,[1,2], flags=FFTW.MEASURE)
-
-    return (imgsperlayer, H, Htemp, Himgs, plan)
 end
 
-    (imgsperlayer,H,Htemp,Himgs,plan) = initprop()
+struct HMatrix
+
+    kernel::Array{Complex{Float64},2}
+    proj::Array{Float64,6}
+    temp::Array{Complex{Float64},4}
+    prefilt::Array{Float64,3}
+    multiwdf::Array{Float64,6}
+    perlayer::Int64
+    lenslets::Int64
+    N::Int64
+    plan::FFTWplan # TODO: need to define the plan type properly + ext originpsf type declaration
+
+    function HMatrix(lf::LightField, originpsf::Array, samples::Int64)
+        const p = lf.par
+        const obj = lf.obj
+        const N = p.sim.vpix
+
+        lenslets = fld(samples,N)
+        perlayer = N^2
+        psfsize = size(originpsf,1)
+
+        kernel = fresnelH(originpsf[:,:,1], p, p.opt.d)
+        proj = Array{Float64,6}(undef, (samples, samples, N, N, obj.zlen))
+        temp = Array{Complex{Float64},3}(undef, (psfsize, psfsize, perlayer))
+        prefilt = Array{Float64,3}(undef,(samples, samples, perlayer))
+        multiwdf = Array{Float64,6}(undef,(N, N, lenslets, lenslets, N, N))
+
+        FFTW.set_num_threads(fld(Threads.nthreads(),2))
+        plan = plan_fft!(Htemp,[1,2], flags=FFTW.MEASURE)
+
+        new(kernel, proj, temp, prefilt, multiwdf, perlayer, lenslets, N, plan)
+    end
+end
+
+"Manually generated sampling--to ensure the center point remains fixed"
+function samples(lf::LightField)
+    const img = lf.imgspace
+    const sim = lf.params.sim
+
+    half1 = img.center:-sim.osr:1
+    half2 = (img.center + sim.osr):sim.osr:img.xlen
+    s::Vector{Int64} = vcat(half1, half2)
+    sort!(s)
+    while mod(length(s), sim.vpix) > 0
+        global s = s[2:end-1]
+    end
+    return s
+end
+
+"Makes 1D sinc kernel for separable LP img filter prior to 3x downsampling"
+function sinc1d()
+    x = range(-2, stop=2, length=13) #NOTE THIS ASSUMES OSR OF 3
+    scale = sum(sinc.(x))
+    return sinc.(x) ./ scale
+end
+
+"Image translation using PaddedViews"
+function shift(img::Union{Array{Complex{Float64},2},Array{Float64,2}},
+                                                     Δx::Int64, Δy::Int6)
+    @views begin
+        if  Δx > 0
+            if Δy > 0
+                return PaddedView(0, img[1+Δy:end, 1:end-Δx], size(img), (1, 1+Δx))
+            elseif Δy < 0
+                return PaddedView(0, img[1:end+Δy, 1:end-Δx], size(img), (1-Δy, 1+Δx))
+            else
+                return PaddedView(0, img[:, 1:end-Δx], size(img), (1, 1+Δx))
+            end
+        elseif Δx < 0
+            if Δy > 0
+                return PaddedView(0, img[1+Δy:end, 1-Δx:end], size(img))
+            elseif Δy < 0
+                return PaddedView(0, img[1:end+Δy, 1-Δx:end], size(img), (1-Δy, 1))
+            else
+                return PaddedView(0, img[:, 1-Δx:end], size(img))
+            end
+        else
+            if Δy > 0
+                return PaddedView(0, img[1+Δy:end, :], size(img))
+            elseif Δy < 0
+                return PaddedView(0, img[1:end+Δy, :], size(img), (1-Δy, 1))
+            else
+                return PaddedView(0, img[:,:], size(img))
+            end
+        end
+    end
+end
+
+function shiftpsf!(dest::Union{Array{Complex{Float64},3},Array{Float64,3}},
+                    img::Union{Array{Complex{Float64},2},Array{Float64,2}})
+    Threads.@threads for i in 1:size(dest,3)
+        @inbounds dest[:,:,i] .= shift(img, delta.x[i], delta.y[i])
+    end
+end
+
+function stackmul!(imgs::Union{Array{Complex{Float64},3},Array{Float64,3}}, kernel::Union{Array{Complex{Float64},2},Array{Float64,2}})
+    Threads.@threads for i in 1:size(imgs,3)
+        @views @inbounds imgs[:,:,i] .= imgs[:,:,i] .* kernel
+    end
+end
+
+function psfmag!(dest::Array{Float64,3}, psfimgs::Array{Complex{Float64},3})
+    Threads.@threads for i in 1:size(dest,3)
+        @views @inbounds dest[:,:,i] .= abs2.(psfimgs[:,:,i])
+    end
+end
+
+function fresnelconv!(images::Array{Complex{Float64},3},
+                           H::Array{Complex{Float64},2})
+    plan*images
+    parimgmul!(images,H)
+    plan\images
+    return
+end
+
+function downsample!(Hsub::SubArray)
+    N = par.sim.vpix
+    hview = reshape(view(Hprefilt,:), (size(Hprefilt,1), size(Hprefilt,2), N, N))
+
+    Threads.@threads for i in 1:N, j in 1:N
+        a = @views conv(sinckern,sinckern, hview[:,:,i,j])[6:end-6,6:end-6]
+        Hsub[:,:,i,j] = view(a,samples,samples)
+    end
+    return
+end
+
+function propagate(originpsf::Array{Complex{Float64},3},
+    mlarray::Array{Complex{Float64},2},
+    mla::Space, img::Space, obj::Space, par::ParameterSet)
+
+    sinckern = sinc1d()
+    # use type constructor
+    #(delta.x,delta.y,Zidx) = calcshifts()
+
+    for layer in 1:obj.zlen
+        layerview = @view Himgs[:,:,:,:,layer]
+        shiftimg!(originpsf[:,:,layer])
+        parimgmul!(Himgtemp,mlarray)
+        fresnelconv!(Himgtemp, H)
+        parpsfmag!(Hprefilt, Himgtemp)
+        downsample!(layerview)
+        lfphase!(layerview)
+    end
+    return
+end
+
+function lfconvprop!()
+    # REPLACE WITH Type constructor
+    #(imgsperlayer,H,Htemp,Himgs,plan) = initprop()
     lfconvprop!()
 
     return Himgs
 end
 
 #=
+
+function shiftstack!(dest::Union{Array{Complex{Float64},3},Array{Float64,3}},
+                    img::Union{Array{Complex{Float64},3},Array{Float64,3}})
+    Threads.@threads for i in 1:size(dest,3)
+        @views @inbounds dest[:,:,i] .= shift(img[:,:,i], delta.x[i], delta.y[i])
+    end
+end
+
 function postprocess(Himgs::Array{Complex{Float64},3}, objspace::Space, Zidx::Array{Int64,1})
 
     #=TODO: Needs to be revised for new pipeline

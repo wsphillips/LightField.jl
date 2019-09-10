@@ -1,7 +1,7 @@
 module phasespace
 
 using Threads
-import LightField.params.ParameterSet, LightField.params.Space
+using ..params
 
 export lfphase!
 
