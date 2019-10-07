@@ -5,21 +5,19 @@ using ..params, ..psf
 
 export propagate, HMatrix
 
-struct Delta
-    x::Vector{Int64}
-    y::Vector{Int64}
-
-    function Delta(lf::LightField)
-        obj = lf.obj
-        sim = lf.par.sim
-        offset = obj.center
-
-        xidx = repeat(1:obj.xlen, inner = obj.ylen)
-        yidx = repeat(obj.ylen:1, outer = obj.xlen)
-        deltax = Int64.((yidx .- offset) .* sim.osr)
-        deltay = Int64.((yidx .- offset) .* sim.osr)
-        new(deltax, deltay)
-    end
+struct Delta:
+  x::Vector{Int64}
+  y::Vector{Int64}
+  function Delta(lf::LightField)
+    obj = lf.obj
+    sim = lf.par.sim
+    offset = obj.center
+    xidx = repeat(1:obj.xlen, inner = obj.ylen)
+    yidx = repeat(obj.ylen:1, outer = obj.xlen)
+    deltax = Int64.((yidx .- offset) .* sim.osr)
+    deltay = Int64.((yidx .- offset) .* sim.osr)
+    new(deltax, deltay)
+  end
 end
 
 struct HMatrix
