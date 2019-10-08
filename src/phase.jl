@@ -24,7 +24,7 @@ function lfphase!(Himgtemp::AbstractArray, Himgtform::AbstractArray,
   end
 
   Threads.@threads for i in 1:N, j in 1:N
-    Himgtransform[:,:,i,j] .= rot180(Himgtransformed[:,:,i,j])
+    Himgtform[:,:,i,j] .= rot180(Himgtform[:,:,i,j])
   end
   return
 end
