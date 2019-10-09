@@ -125,11 +125,11 @@ end
 
 struct LightField
     par::ParameterSet
-    mla::MicroLensArray
+    mlaspace::Space
     img::Space
     obj::Space
-    function LightField(par::ParameterSet, mla::Space, img::Space, obj::Space)
-        new(par, mla, img, obj)
+    function LightField(par::ParameterSet, mlaspace::Space, img::Space, obj::Space)
+        new(par, mlaspace, img, obj)
     end
 end
 

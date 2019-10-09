@@ -21,16 +21,16 @@ struct Delta:
 end
 
 struct HMatrix
-# TODO: need to define the plan type properly + ext originpsf type declaration
+
     kernel::Array{ComplexF64,2}
-    proj::Array{Float64,6}
-    temp::Array{ComplexF64,4}
-    prefilt::Array{Float64,3}
+    flayer::Array{ComplexF64,3}
+    rlayer::Array{Float64,3}
+    dsrlayer::Array{Float64,3}
     multiwdf::Array{Float64,6}
     perlayer::Int
     lenslets::Int
     N::Int
-    plan::FFTWplan
+    plan::FFTWplan # TODO: extend type definition
 
     function HMatrix(lf::LightField, originpsf::Array{ComplexF64,3}, samples::Int)
         const p = lf.par
@@ -42,19 +42,20 @@ struct HMatrix
         psfsize = size(originpsf,1)
 
         kernel = fresnelH(originpsf[:,:,1], p, p.opt.d)
-        proj = Threads.@spawn Array{Float64,6}(undef,
-                                              (samples, samples, N, N, obj.zlen))
-        temp = Threads.@spawn Array{ComplexF64,3}(undef,
+       
+        flayer = Threads.@spawn Array{ComplexF64,3}(undef,
                                                  (psfsize, psfsize, perlayer))
-        prefilt = Threads.@spawn Array{Float64,3}(undef,
-                                                 (samples, samples, perlayer))
+        rlayer = Threads.@spawn Array{Float64,3}(undef,
+                                                 (psfsize, psfsize, perlayer))
+        dsrlayer = Threads.@spawn Array{Float64,3}(undef,
+                                              (samples, samples, perlayer))
         multiwdf = Threads.@spawn Array{Float64,6}(undef,
                                                   (N, N, lenslets, lenslets, N, N))
-
+       
         FFTW.set_num_threads(Threads.nthreads()>>1))
-        plan = plan_fft!(fetch(temp),[1,2], flags=FFTW.MEASURE)
+        plan = plan_fft!(fetch(flayer),[1,2], flags=FFTW.MEASURE)
 
-        new(kernel, fetch(proj), temp, fetch(prefilt), fetch(multiwdf),
+        new(kernel, flayer, fetch(rlayer), fetch(dsrlayer), fetch(multiwdf),
             perlayer, lenslets, N, plan)
     end
 end
@@ -114,8 +115,7 @@ function shift(img::Union{Array{ComplexF64,2},Array{Float64,2}},
     end
 end
 
-function shiftpsf!(dest::Union{Array{ComplexF64,3},Array{Float64,3}},
-                    img::Union{Array{ComplexF64,2},Array{Float64,2}})
+function shiftpsf!(H::HMatrix, img::Array{ComplexF64,2}, delta::Delta)
     Threads.@threads for i in 1:size(dest,3)
         @inbounds dest[:,:,i] .= shift(img, delta.x[i], delta.y[i])
     end
@@ -153,22 +153,20 @@ function downsample!(Hsub::SubArray)
     return
 end
 
-function propagate(originpsf::Array{ComplexF64,3},
-    mlarray::Array{ComplexF64,2},
-    mla::Space, img::Space, obj::Space, par::ParameterSet)
-
+function propagate(originpsf::Array{ComplexF64,3}, lf::LightField, mlarray::Array{ComplexF64,2})
     sinckern = sinc1d()
-    # use type constructor
-    #(delta.x,delta.y,Zidx) = calcshifts()
-
+    delta = Delta(lf)
+    samples = samples(lf)
+    Hlayer = HMatrix(lf, originpsf, samples)
+    # make H matrix
     for layer in 1:obj.zlen
-        layerview = @view Himgs[:,:,:,:,layer]
-        shiftimg!(originpsf[:,:,layer])
-        parimgmul!(Himgtemp,mlarray)
-        fresnelconv!(Himgtemp, H)
-        parpsfmag!(Hprefilt, Himgtemp)
-        downsample!(layerview)
-        lfphase!(layerview)
+
+        shiftpsf!(Hlayer, originpsf[:,:,layer])
+        stackmul!(Hlayer, mlarray)
+        fresnelconv!(Hlayer)
+        parpsfmag!(Hlayer)
+        downsample!(Hlayer)
+        lfphase!(Hlayer)
     end
     return
 end
