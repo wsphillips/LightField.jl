@@ -5,7 +5,7 @@ using ..params, ..psf
 using Base.Threads
 export propagate, HMatrix
 
-struct Delta:
+struct Delta
   x::Vector{Int}
   y::Vector{Int}
   function Delta(lf::LightField)
@@ -43,14 +43,10 @@ struct HMatrix
 
         kernel = fresnelH(originpsf[:,:,1], p, p.opt.d)
        
-        flayer = Threads.@spawn Array{ComplexF64,3}(undef,
-                                                 (psfsize, psfsize, perlayer))
-        rlayer = Threads.@spawn Array{Float64,3}(undef,
-                                                 (psfsize, psfsize, perlayer))
-        dsrlayer = Threads.@spawn Array{Float64,3}(undef,
-                                              (samples, samples, perlayer))
-        multiwdf = Threads.@spawn Array{Float64,6}(undef,
-                                                  (N, N, lenslets, lenslets, N, N))
+        flayer = Array{ComplexF64,3}(undef,(psfsize, psfsize, perlayer))
+        rlayer = Array{Float64,3}(undef,(psfsize, psfsize, perlayer))
+        dsrlayer = Array{Float64,3}(undef,(samples, samples, perlayer))
+        multiwdf = Array{Float64,6}(undef,(N, N, lenslets, lenslets, N, N))
        
         FFTW.set_num_threads(Threads.nthreads()>>1))
         plan = plan_fft!(fetch(flayer),[1,2], flags=FFTW.MEASURE)
