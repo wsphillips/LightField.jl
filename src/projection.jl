@@ -51,8 +51,7 @@ struct HMatrix
         FFTW.set_num_threads(Threads.nthreads()>>1))
         plan = plan_fft!(fetch(flayer),[1,2], flags=FFTW.MEASURE)
 
-        new(kernel, flayer, fetch(rlayer), fetch(dsrlayer), fetch(multiwdf),
-            perlayer, lenslets, N, plan)
+        new(kernel, flayer, rlayer,dsrlayer,multiwdf, perlayer, lenslets, N, plan)
     end
 end
 
@@ -80,8 +79,7 @@ function sinc1d()
 end
 
 "Image translation using PaddedViews"
-function shift(img::Union{Array{ComplexF64,2},Array{Float64,2}},
-                                                     Δx::Int, Δy::Int6)
+function shift(img::Union{Array{ComplexF64,2},Array{Float64,2}}, Δx::Int, Δy::Int)
     @views begin
         if  Δx > 0
             if Δy > 0
@@ -112,39 +110,34 @@ function shift(img::Union{Array{ComplexF64,2},Array{Float64,2}},
 end
 
 function shiftpsf!(H::HMatrix, img::Array{ComplexF64,2}, delta::Delta)
-    Threads.@threads for i in 1:size(dest,3)
-        @inbounds dest[:,:,i] .= shift(img, delta.x[i], delta.y[i])
+    Threads.@threads for i in 1:size(H.flayer,3)
+        @inbounds H.flayer[:,:,i] .= shift(img, delta.x[i], delta.y[i])
     end
 end
 
-function stackmul!(imgs::Union{Array{ComplexF64,3},Array{Float64,3}},
-                   kernel::Union{Array{ComplexF64,2},Array{Float64,2}})
-    Threads.@threads for i in 1:size(imgs,3)
-        @views @inbounds imgs[:,:,i] .= imgs[:,:,i] .* kernel
+function stackmul!(H::HMatrix)
+    Threads.@threads for i in 1:size(H.flayer,3)
+        @views @inbounds H.flayer[:,:,i] .= H.flayer[:,:,i] .* H.kernel
     end
 end
 
-function psfmag!(dest::Array{Float64,3}, psfimgs::Array{ComplexF64,3})
-    Threads.@threads for i in 1:size(dest,3)
-        @views @inbounds dest[:,:,i] .= abs2.(psfimgs[:,:,i])
+function psfmag!(H::HMatrix)
+    Threads.@threads for i in 1:size(H.flayer,3)
+        @views @inbounds H.rlayer[:,:,i] .= abs2.(H.flayer[:,:,i])
     end
 end
 
-function fresnelconv!(images::Array{ComplexF64,3},
-                      H::Array{ComplexF64,2})
-    plan*images
-    parimgmul!(images,H)
-    plan\images
+function fresnelconv!(H::HMatrix)
+    H.plan*H.flayer
+    stackmul!(H)
+    H.plan\H.flayer
     return
 end
 
-function downsample!(Hsub::SubArray)
-    N = par.sim.vpix
-    hview = reshape(view(Hprefilt,:), (size(Hprefilt,1), size(Hprefilt,2), N, N))
-
-    Threads.@threads for i in 1:N, j in 1:N
-        a = @views conv(sinckern,sinckern, hview[:,:,i,j])[6:end-6,6:end-6]
-        Hsub[:,:,i,j] = view(a,samples,samples)
+function downsample!(H::HMatrix, kernel1D::Vector{Float64})
+    Threads.@threads for i in 1:size(H.rlayer,3)
+        a = view(conv(kernel1D,kernel1D, H.rlayer[:,:,i]),6:end-6,6:end-6)
+        H.dsrlayer[:,:,i] = view(a,samples,samples)
     end
     return
 end
@@ -157,12 +150,12 @@ function propagate(originpsf::Array{ComplexF64,3}, lf::LightField, mlarray::Arra
     # make H matrix
     for layer in 1:obj.zlen
 
-        shiftpsf!(Hlayer, originpsf[:,:,layer])
+        shiftpsf!(Hlayer, originpsf[:,:,layer], delta)
         stackmul!(Hlayer, mlarray)
         fresnelconv!(Hlayer)
-        parpsfmag!(Hlayer)
+        psfmag!(Hlayer)
         downsample!(Hlayer)
-        lfphase!(Hlayer)
+        lfphase!(Hlayer) # TODO: refactor phase.jl and add import/exports
     end
     return
 end
