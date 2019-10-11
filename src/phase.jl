@@ -5,9 +5,9 @@ using ..params
 export lfphase!
 
 #TODO: Fix type declarations
-function lfphase!(Himgtemp::AbstractArray, Himgtform::AbstractArray,
-                  multiWDF::AbstractArray, par::ParameterSet, img::Space)
-  N = par.sim.vpix
+function phaseindex(lf::LightField)
+  N = lf.par.sim.N
+  lookup::Vector{UInt64} = 1:(length(samples)*length(samples)*N*N*lf.par.obj.zlen)
   Threads.@threads for i in 1:N, j in 1:N
     bylenslets = @view(Himgtemp[i:N:end, j:N:end, :])
     for a in 1:lenslets, b in 1: lenslets

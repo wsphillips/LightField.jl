@@ -146,7 +146,7 @@ function propagate(originpsf::Array{ComplexF64,3}, lf::LightField, mlarray::Arra
     sinckern = sinc1d()
     delta = Delta(lf)
     samples = samples(lf)
-    Hlayer = HMatrix(lf, originpsf, samples)
+    Hlayer = HMatrix(lf, originpsf, length(samples))
     # make H matrix
     for layer in 1:obj.zlen
 
