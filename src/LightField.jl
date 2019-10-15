@@ -5,8 +5,9 @@ include("psf.jl")
 include("psfsize.jl")
 include("mla.jl")
 include("projection.jl")
+include("phase.jl")
 
-using LightField.psf, LightField.psfsize, LightField.params, LightField.mla, LightField.projection
+using psf, psfsize, params, mla, projection, phasespace
 export setup, calcsize, originPSFproj, calcML, propagate
 
 

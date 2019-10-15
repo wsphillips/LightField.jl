@@ -27,7 +27,7 @@ function psfline(x₁testline::Vector{Float64}, x₃max::Float64, p::ParamaterSe
     Threads.@threads for i in 1:length(v)
         @inbounds linearpsf[i] = integratePSF(v[i], u, p.opt.a0, p.con.alpha) * Kₒ
     end
-
+    # TODO: extend to cases where b > 0
     linearpsfmag = Float64.( abs2.(linearpsf) ./ maximum(abs2.(linearpsf)) )
 
     return linearpsfmag

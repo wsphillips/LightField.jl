@@ -9,6 +9,7 @@ struct MicroLensArray
 
     pitch::Float64
     fml::Float64
+    tf::Union{Array{ComplexF64,2},Nothing}
 
     function MicroLensArray(mla::Dict{AbstractString,Any})
 
@@ -78,8 +79,8 @@ struct SimulationParams
         subvpix = vpix*osr
         pixelpitch = mla.pitch / vpix
         subpixelpitch = pixelpitch / osr
-
         new(vpix,osr,zmax,zmin,zstep, subvpix, pixelpitch, subpixelpitch)
+        
     end
 end
 
