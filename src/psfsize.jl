@@ -1,7 +1,7 @@
 module psfsize
 
-using LightField.params
-using LightField.psf
+using ..params
+using ..psf
 export calcsize
 
 function calcsize(p::ParameterSet, obj::Space)
@@ -15,7 +15,7 @@ function calcsize(p::ParameterSet, obj::Space)
     return imgspace
 end
 
-function psfline(x₁testline::Vector{Float64}, x₃max::Float64, p::ParamaterSet)
+function psfline(x₁testline::Vector{Float64}, x₃max::Float64, p::ParameterSet)
 
     l²norm² = abs.(x₁testline) ./ p.opt.M
     v = l²norm² .* (p.con.k*sin(p.con.alpha))

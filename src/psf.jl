@@ -1,10 +1,11 @@
 module psf
 
 using FFTW
+using ..params
 import SpecialFunctions.besselj
 import FastGaussQuadrature.gausslegendre
 import LinearAlgebra.Symmetric
-import LightField.params.ParameterSet, LightField.params.Space
+
 
 export integratePSF, fresnelH, originPSFproj
 

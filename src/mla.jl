@@ -1,35 +1,32 @@
 module mla
 
 using DSP
-import LightField.params.ParameterSet, LightField.params.Space
-export calcML
+using ..params
+export calcml
 
-# TODO: Refactor this messy code. conv2() is deprecated
+function calcml(img::Space, mlaspace::Space, par::ParameterSet)
 
-function calcML(imgspace::Space, mlaspace::Space, par::ParameterSet)
+    center = findfirst(img.x .== 0)
+    mllen = mlaspace.xlen
+    
+    allcenters = vcat(center:-mllen:1, (center + mllen):mllen:img.xlen)
+    sort!(allcenters) 
 
-    x1center = findfirst(imgspace.x .== 0)
-    x2center = x1center
-    x1MLdist = mlaspace.xlen
-    x2MLdist = x1MLdist
-    x1centerALL = vcat(x1center:-x1MLdist:1 , (x1center + x1MLdist):x1MLdist:imgspace.xlen)
-    x1centerALL = sort!(x1centerALL)
-    x2centerALL = x1centerALL
-    patternML = complex(zeros(x1MLdist, x2MLdist))
+    a = complex(zeros(mllen,mllen))
 
-    xL2norm = mlaspace.x.^2 .+ mlaspace.y'.^2
-    patternML .= exp.(((-im*par.con.k)/(2*par.mla.fml)).*xL2norm);
+    l2norm = mlaspace.x.^2 .+ mlaspace.y'.^2
+    a .= exp.(((-im * par.con.k) / (2 * par.mla.fml)) .* l2norm);
 
-    MLARRAY = complex(zeros(imgspace.xlen, imgspace.ylen))
-    MLARRAY[x1centerALL, x2centerALL] .= 1
+    b = zeros(ComplexF64, img.xlen, img.ylen)
+    b[allcenters, allcenters] .= 1
 
     #TODO: This is messy. Can be replaced with a filter function that auto crops
     # conv2() deprecated in favor or conv()
-    MLARRAYfull = conv2(MLARRAY, patternML)
-    border = fld((size(MLARRAYfull,1) - imgspace.xlen),2) + 1
-    croprange = Int.(border:(imgspace.xlen + (border-1)))
+    c = conv(b, a)
+    border = fld((size(c, 1) - img.xlen), 2) + 1
+    crop = Int.(border:(img.xlen + (border-1)))
 
-    return MLARRAYfull[croprange, croprange]
+    return c[crop, crop]
 end
 
 end # module
