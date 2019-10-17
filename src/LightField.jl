@@ -3,10 +3,10 @@ module LightField
 include("params.jl")
 include("psf.jl")
 include("psfsize.jl")
-include("mla.jl")
+
 include("projection.jl")
 
-using .psf, .psfsize, .params, .mla, .projection 
+using .psf, .psfsize, .params, .projection 
 using TOML
 
 function setup(filename::String)
@@ -31,13 +31,10 @@ function setup(filename::String)
                                                             sim.subpixelpitch)
     obj = Space(xobj, yobj, zobj)
     mlaspace = Space(xml, yml)
-    mla = MicroLensArray(pop!(config, "mla"))
     par = ParameterSet(opt, sim, con)
-
-    # TODO: fix up the argument passing and then run calcml()
     img = calcsize(par,obj)
-
-    lf = LightField(par, mla, img, obj)
+    mla = MicroLensArray(pitch, fml, mlaspace, img, par)
+    lf = LightFieldSimulation(par, mla, img, obj)
     return lf
 end
 

@@ -4,12 +4,13 @@ using FFTW, PaddedViews
 using ..params, ..psf 
 using Base.Threads
 using DSP
+#import FFTW.cFFTWplan
 export propagate, HMatrix
 
 struct Delta
   x::Vector{Int}
   y::Vector{Int}
-  function Delta(lf::LightField)
+  function Delta(lf::LightFieldSimulation)
     obj = lf.obj
     sim = lf.par.sim
     offset = obj.center
@@ -31,14 +32,14 @@ struct HMatrix
     perlayer::Int
     lenslets::Int
     N::Int
-    plan::FFTW.cFFTWplan{Complex{Float64},-1,true,3}
-    function HMatrix(lf::LightField, originpsf::Array{ComplexF64,3}, samples::Int)
-        const p = lf.par
-        const obj = lf.obj
-        const N = p.sim.vpix
-        const lenslets = fld(samples,N)
-        const perlayer = N^2
-        const psfsize = size(originpsf,1)
+    plan #::FFTW.cFFTWplan{Complex{Float64},-1,true,3}
+    function HMatrix(lf::LightFieldSimulation, originpsf::Array{ComplexF64,3}, samples::Int)
+        p = lf.par
+        obj = lf.obj
+        N = p.sim.vpix
+        lenslets = fld(samples,N)
+        perlayer = N^2
+        psfsize = size(originpsf,1)
 
         kernel = fresnelH(originpsf[:,:,1], p, p.opt.d)
        
@@ -55,16 +56,17 @@ struct HMatrix
 end
 
 "Manually generated sampling--to ensure the center point remains fixed"
-function samples(lf::LightField)
-    const img = lf.imgspace
-    const sim = lf.params.sim
+function samples(lf::LightFieldSimulation)
+    img = lf.imgspace
+    sim = lf.params.sim
 
     half1 = img.center:-sim.osr:1
     half2 = (img.center + sim.osr):sim.osr:img.xlen
     s::Vector{Int} = vcat(half1, half2)
     sort!(s)
+    # TODO: fix scope shit here
     while mod(length(s), sim.vpix) > 0
-        global s = s[2:end-1]
+        s = s[2:end-1]
     end
     return s
 end
@@ -141,47 +143,48 @@ function downsample!(H::HMatrix, kernel1D::Vector{Float64})
     return
 end
 
-function lfphase!(H::HMatrix, lf::LightField)
+function lfphase!(H::HMatrix, lf::LightFieldSimulation)
   N = lf.par.sim.N
   zlen = lf.par.obj.zlen
   samplelen = size(H.dsrlayer,1)
   lenslets = H.lenslets 
   
-  Threads.@threads for i in 1:N, j in 1:N
+  for i in 1:N, j in 1:N
     bylenslets = @view(H.dsrlayer[i:N:end, j:N:end, :])
     for a in 1:lenslets, b in 1:lenslets
-      H.multiwdf[i, j, a, b, :, :] .= reshape(@view(bylenslets[a,b,:]), (N,N))
+      H.multiwdf[i, j, a, b, :, :] = reshape(@view(bylenslets[a,b,:]), (N,N))
     end
   end
 
-  Threads.@threads for a in 1:lenslets, i in 1:N
+  for a in 1:lenslets, i in 1:N
     x = N * a + 1 - i;
     for b in 1:lenslets, j in 1:N
       y = N * b + 1 - j;
-      @views H.dsrlayer[x, y, :, :] .= H.multiwdf[:, :, a, b, i, j];
+      @views H.dsrlayer[x, y, :, :] = H.multiwdf[:, :, a, b, i, j];
     end
   end
 
-  Threads.@threads for i in 1:N, j in 1:N
+  for i in 1:N, j in 1:N
     H.dsrlayer[:,:,i,j] .= rot180(H.dsrlayer[:,:,i,j])
   end
 
   return 
 end
 
-function propagate(originpsf::Array{ComplexF64,3}, lf::LightField, mlarray::Array{ComplexF64,2})
-    
-    obj = lf.par.obj
+function propagate(lf::LightFieldSimulation)
+    # call to generate originpsf
+    originpsf = originPSFproj(lf.img, lf.obj, lf.par)
+    obj = lf.obj
     sinckern = sinc1d()
     delta = Delta(lf)
-    samples = samples(lf)
+    samplepts = samples(lf)
     Hlayer = HMatrix(lf, originpsf, length(samples))
     Himgs = Array{Float32,5}(undef,length(samples), length(samples, Hlayer.N, Hlayer.N, obj.zlen))
     # make H matrix
     for layer in 1:obj.zlen
 
         shiftpsf!(Hlayer, originpsf[:,:,layer], delta)
-        stackmul!(Hlayer, mlarray)
+        stackmul!(Hlayer, lf.ml.array)
         fresnelconv!(Hlayer)
         psfmag!(Hlayer)
         downsample!(Hlayer, sinckern)

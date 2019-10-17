@@ -22,8 +22,7 @@ function lfmPSF(θ::Float64, α::Float64, v::Float64, u::Float64, a₀::Float64)
         # PSF for classic LFM
         I = sqrt(cos(θ)) * besselj(0, v*sin(θ)/sin(α)) * exp((im*u*sin(θ/2)^2)/(2*sin(α/2)^2))*sin(θ)
     else
-        # PSF as given by Li et al. 2018. Used when MLA is offset from NIP by
-        # distance a₀
+        # PSF as given by Li et al. 2018. Used when MLA is offset from NIP by distance a₀
         I = sqrt(cos(θ)) * besselj(0,v*sin(θ)/sin(α)) * exp((-im*u*sin(θ/2)^2)/(2*sin(α/2)^2))*sin(θ)
     end
     return I

@@ -1,8 +1,9 @@
 module params
 
 using TOML
+using DSP
 
-export MicOptics, SimulationParams, Constants, ParameterSet, Space, MicroLensArray, LightField
+export MicOptics, SimulationParams, Constants, ParameterSet, Space, MicroLensArray, LightFieldSimulation
 
 struct MicOptics
 
@@ -16,7 +17,7 @@ struct MicOptics
     n::Float64
     d::Float64
 
-    function MicOptics(optics::Dict{AbstractString,Any}, fml::Float64)
+    function MicOptics(optics::Dict{String,Any}, fml::Float64)
 
         ftl     = pop!(optics, "ftl")
         M       = pop!(optics, "M")
@@ -48,7 +49,7 @@ struct SimulationParams
     pixelpitch::Float64
     subpixelpitch::Float64
 
-    function SimulationParams(simparams::Dict{AbstractString,Any}, pitch::Float64)
+    function SimulationParams(simparams::Dict{String,Any}, pitch::Float64)
 
         vpix    = pop!(simparams, "vpix")
         osr     = pop!(simparams, "osr")
@@ -100,6 +101,11 @@ struct Space
         new(x, y, z, xlen, ylen, zlen, center)
     end
 end
+struct ParameterSet
+    opt::MicOptics
+    sim::SimulationParams
+    con::Constants
+end
 
 struct MicroLensArray
 
@@ -108,20 +114,32 @@ struct MicroLensArray
     array::Array{ComplexF64,2}
     space::Space
 
-    function MicroLensArray(mla::Dict{AbstractString,Any})
-        pitch   = pop!(mla, "pitch")
-        fml     = pop!(mla, "fml")
-        new(pitch, fml)
+    function MicroLensArray(pitch::Float64, fml::Float64, mlaspace::Space, img::Space, par::ParameterSet)
+        center = findfirst(img.x .== 0)
+        mllen = mlaspace.xlen
+        
+        allcenters = vcat(center:-mllen:1, (center + mllen):mllen:img.xlen)
+        sort!(allcenters) 
+    
+        a = complex(zeros(mllen,mllen))
+    
+        l2norm = mlaspace.x.^2 .+ mlaspace.y'.^2
+        a .= exp.(((-im * par.con.k) / (2 * fml)) .* l2norm);
+    
+        b = zeros(ComplexF64, img.xlen, img.ylen)
+        b[allcenters, allcenters] .= 1
+    
+        #TODO: This is messy. Find a cleaner way to do it? works for now...
+        c = conv(b, a)
+        border = fld((size(c, 1) - img.xlen), 2) + 1
+        crop = Int.(border:(img.xlen + (border-1)))
+    
+        new(pitch, fml, c[crop, crop], mlaspace)
     end
 end
 
-struct ParameterSet
-    opt::MicOptics
-    sim::SimulationParams
-    con::Constants
-end
 
-struct LightField
+struct LightFieldSimulation
     par::ParameterSet
     mla::MicroLensArray
     img::Space
