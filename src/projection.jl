@@ -57,8 +57,8 @@ end
 
 "Manually generated sampling--to ensure the center point remains fixed"
 function samples(lf::LightFieldSimulation)
-    img = lf.imgspace
-    sim = lf.params.sim
+    img = lf.img
+    sim = lf.par.sim
 
     half1 = img.center:-sim.osr:1
     half2 = (img.center + sim.osr):sim.osr:img.xlen
@@ -135,7 +135,7 @@ function fresnelconv!(H::HMatrix)
     return
 end
 
-function downsample!(H::HMatrix, kernel1D::Vector{Float64})
+function downsample!(H::HMatrix, kernel1D::Vector{Float64}, samples::Vector{Int})
     Threads.@threads for i in 1:size(H.rlayer,3)
         a = @view(conv(kernel1D,kernel1D, H.rlayer[:,:,i])[6:end-6,6:end-6])
         H.dsrlayer[:,:,i] .= view(a,samples,samples)
@@ -144,28 +144,28 @@ function downsample!(H::HMatrix, kernel1D::Vector{Float64})
 end
 
 function lfphase!(H::HMatrix, lf::LightFieldSimulation)
-  N = lf.par.sim.N
-  zlen = lf.par.obj.zlen
+  N = lf.par.sim.vpix
+  zlen = lf.obj.zlen
   samplelen = size(H.dsrlayer,1)
   lenslets = H.lenslets 
   
   for i in 1:N, j in 1:N
     bylenslets = @view(H.dsrlayer[i:N:end, j:N:end, :])
     for a in 1:lenslets, b in 1:lenslets
-      H.multiwdf[i, j, a, b, :, :] = reshape(@view(bylenslets[a,b,:]), (N,N))
+      H.multiwdf[i, j, a, b, :, :] .= reshape(@view(bylenslets[a,b,:]), (N,N))
     end
   end
-
+  layer4d = reshape(view(H.dsrlayer,:), samplelen, samplelen, N, N)
   for a in 1:lenslets, i in 1:N
     x = N * a + 1 - i;
     for b in 1:lenslets, j in 1:N
       y = N * b + 1 - j;
-      @views H.dsrlayer[x, y, :, :] = H.multiwdf[:, :, a, b, i, j];
+      @views layer4d[x, y, :, :] .= H.multiwdf[:, :, a, b, i, j];
     end
   end
 
   for i in 1:N, j in 1:N
-    H.dsrlayer[:,:,i,j] .= rot180(H.dsrlayer[:,:,i,j])
+    layer4d[:,:,i,j] .= rot180(layer4d[:,:,i,j])
   end
 
   return 
@@ -178,18 +178,18 @@ function propagate(lf::LightFieldSimulation)
     sinckern = sinc1d()
     delta = Delta(lf)
     samplepts = samples(lf)
-    Hlayer = HMatrix(lf, originpsf, length(samples))
-    Himgs = Array{Float32,5}(undef,length(samples), length(samples, Hlayer.N, Hlayer.N, obj.zlen))
+    Hlayer = HMatrix(lf, originpsf, length(samplepts))
+    Himgs = Array{Float32,5}(undef,length(samplepts), length(samplepts), Hlayer.N, Hlayer.N, obj.zlen)
     # make H matrix
     for layer in 1:obj.zlen
 
         shiftpsf!(Hlayer, originpsf[:,:,layer], delta)
-        stackmul!(Hlayer, lf.ml.array)
+        stackmul!(Hlayer, lf.mla.array)
         fresnelconv!(Hlayer)
         psfmag!(Hlayer)
-        downsample!(Hlayer, sinckern)
+        downsample!(Hlayer, sinckern, samplepts)
         lfphase!(Hlayer, lf)
-        Himgs[:,:,:,:,layer] .= Hlayer.dsrlayer
+        Himgs[:,:,:,:,layer] .= reshape(view(Hlayer.dsrlayer,:),length(samplepts),length(samplepts), lf.par.sim.vpix, lf.par.sim.vpix)
     end
     return Himgs
 end
