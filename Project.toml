@@ -1,0 +1,15 @@
+name = "LightField"
+uuid = "7cdec32e-401e-11e9-1561-2d3dc5745ba2"
+authors = ["Wiktor <wsphillips@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+DSP = "717857b8-e6f2-59f4-9121-6e50c889abd2"
+FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
+FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"
+LanguageServer = "2b0e0bc5-e4fd-59b4-8912-456d1b03d8d7"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+PaddedViews = "5432bcbf-9aad-5242-b902-cca2824c8663"
+Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
+SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
+TOML = "037cace4-c66a-5006-a6b7-c26ba1b2f83e"
