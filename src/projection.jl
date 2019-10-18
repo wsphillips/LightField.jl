@@ -197,20 +197,8 @@ end
 end #module
 
 #=
-
-function shiftstack!(dest::Union{Array{ComplexF64,3},Array{Float64,3}},
-                    img::Union{Array{ComplexF64,3},Array{Float64,3}})
-    Threads.@threads for i in 1:size(dest,3)
-        @views @inbounds dest[:,:,i] .= shift(img[:,:,i], delta.x[i], delta.y[i])
-    end
-end
-
 function postprocess(Himgs::Array{ComplexF64,3}, objspace::Space, Zidx::Array{Int,1})
-
     #=TODO: Needs to be revised for new pipeline
-    "Non original code: addition of low pass filter before downsampling"
-    stackbin = conv(stackbin, sincfilter)[croppedrng, croppedrng]
-    =#
     "Normalize the whole data set"
     Himgs = Himgs./maximum(Himgs)
 
@@ -218,7 +206,7 @@ function postprocess(Himgs::Array{ComplexF64,3}, objspace::Space, Zidx::Array{In
     value. Flooring all values below the cutoff to zero."""
     tol = 0.005
 
-    for layer in 1:objspace.zlen
+    for layer in 1:lf.obj.zlen
         H4Dslice = Himgs[:,:,Zidx .== layer]
         H4Dslice[H4Dslice .< (tol*maximum(H4Dslice))] .= 0
         Himgs[:,:,Zidx .== layer] = H4Dslice
@@ -227,13 +215,5 @@ function postprocess(Himgs::Array{ComplexF64,3}, objspace::Space, Zidx::Array{In
 end
 =#
 
-# example scratch
-#= this allows logical reassignment of a view. Using the vectorized broadcast
-# would instead return an allocated array.
-# This modifies the parent and preserves the view + still fast to do.
-for i in eachindex(viewa)
-    if viewa[i] < 0.5
-        viewa[i] = 0
-    end
-end
-=#
+
+
