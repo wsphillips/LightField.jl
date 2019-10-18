@@ -197,14 +197,17 @@ end
 end #module
 
 #=
+
 function postprocess(Himgs::Array{ComplexF64,3}, objspace::Space, Zidx::Array{Int,1})
     #=TODO: Needs to be revised for new pipeline
+
     "Normalize the whole data set"
     Himgs = Himgs./maximum(Himgs)
 
     """Threshold all the images (grouped by Z-plane) by the tolerance
     value. Flooring all values below the cutoff to zero."""
     tol = 0.005
+
 
     for layer in 1:lf.obj.zlen
         H4Dslice = Himgs[:,:,Zidx .== layer]
@@ -214,6 +217,4 @@ function postprocess(Himgs::Array{ComplexF64,3}, objspace::Space, Zidx::Array{In
     return Himgs
 end
 =#
-
-
 
