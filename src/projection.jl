@@ -188,7 +188,7 @@ function propagate(lf::LightFieldSimulation)
         fresnelconv!(Hlayer)
         psfmag!(Hlayer)
         downsample!(Hlayer, sinckern, samplepts)
-        lfphase!(Hlayer, lf)
+        #lfphase!(Hlayer, lf)
         Himgs[:,:,:,:,layer] .= reshape(view(Hlayer.dsrlayer,:),length(samplepts),length(samplepts), lf.par.sim.vpix, lf.par.sim.vpix)
     end
     return Himgs
@@ -199,7 +199,7 @@ end #module
 #=
 
 function postprocess(Himgs::Array{ComplexF64,3}, objspace::Space, Zidx::Array{Int,1})
-    #=TODO: Needs to be revised for new pipeline
+    #TODO: Needs to be revised for new pipeline
 
     "Normalize the whole data set"
     Himgs = Himgs./maximum(Himgs)
