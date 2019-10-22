@@ -2,35 +2,44 @@ module psfsize
 
 using ..params
 using ..psf
+using FFTW
 export calcsize
 
 function calcsize(p::ParameterSet, obj::Space)
-
+    # we set an arbitrarily high line length to test across
     testline = collect((0:1:(p.sim.subvpix*20)) .* p.sim.subpixelpitch)
     x3max = maximum(abs.(obj.z))
 
-    lineprojection = psfline(testline, x3max, p)
+    if p.opt.a0 > zero(Float64)
+        lineprojection = Array{Float64,2}(undef, length(testline), obj.zlen)
+        for i in 1:obj.zlen
+            lineprojection[:,i] .= psfline(testline, obj.z[i], p)
+        end
+    
+    
+    else 
+        lineprojection = psfline(testline, x3max, p)
+    end
+    psflinemag::Vector{Float64} =  abs2.(lineprojection) ./ maximum(abs2.(lineprojection))    
     imgspace = makeimgspace(lineprojection, p)
 
     return imgspace
 end
 
-function psfline(x₁testline::Vector{Float64}, x₃max::Float64, p::ParameterSet)
+function psfline(x₁line::Vector{Float64}, x₃::Float64, p::ParameterSet)
 
-    l²norm² = abs.(x₁testline) ./ p.opt.M
+    l²norm² = abs.(x₁line) ./ p.opt.M
     v = l²norm² .* (p.con.k*sin(p.con.alpha))
-    u = 4*p.con.k * x₃max * (sin(p.con.alpha/2)^2)
+    u = 4*p.con.k * x₃ * (sin(p.con.alpha/2)^2)
     Kₒ = p.opt.M/(p.opt.fobj*p.opt.lambda)^2 * exp(-im*u/(4(sin(p.con.alpha/2)^2)))
 
-    linearpsf = complex(zeros(length(v)))
+    psfline = Array{ComplexF64,1}(undef,length(v))
 
     Threads.@threads for i in 1:length(v)
-        @inbounds linearpsf[i] = integratePSF(v[i], u, p.opt.a0, p.con.alpha) * Kₒ
+        @inbounds psfline[i] = integratePSF(v[i], u, p.opt.a0, p.con.alpha) * Kₒ
     end
-    # TODO: extend to cases where b > 0
-    linearpsfmag = Float64.( abs2.(linearpsf) ./ maximum(abs2.(linearpsf)) )
 
-    return linearpsfmag
+    return psflinemag
 end
 
 function makeimgspace(psfline::Vector{Float64}, p::ParameterSet)

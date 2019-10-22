@@ -34,7 +34,8 @@ function integratePSF(v::Float64, u::Float64, a₀::Float64, α::Float64)
     return integral
 end
 
-function fresnelH(f0::Array{Complex{Float64},2}, par::ParameterSet, z::Float64)
+function fresnelH(f0::Array{Complex{Float64},N}, par::ParameterSet, z::Float64) where N
+    
     Nx = size(f0,1)
     f0length = par.sim.subpixelpitch*Nx
 
@@ -45,8 +46,12 @@ function fresnelH(f0::Array{Complex{Float64},2}, par::ParameterSet, z::Float64)
 
     # Setup frequency axes
     fx = spfreq'
-    fy = reverse(spfreq, dims=1)
-    FXFY = fx.^2 .+ fy.^2
+    if N == 2
+        fy = reverse(spfreq, dims=1)
+        FXFY = fx.^2 .+ fy.^2
+    elseif N == 1
+        FXFY = fx.^2
+    end # for correctness we could include error throw if wrong array dims
 
     # Fresnel propagation func. (see: Computational Fourier Optics p.54-55,63)
     H = exp(im*par.con.k0*z).*exp.((-im*pi*par.opt.lambda*z) .* FXFY)
@@ -130,13 +135,13 @@ end
 function itrfresnelconv!(originimgs::Array{Complex{Float64},3}, Ha0::Array{Complex{Float64},2}, steps::Int64, obj::Space)
     f0 = originimgs[:,:,1]
     p = plan_fft!(f0, [1,2])
-    invp = inv(p)
+   
     Threads.@threads for h in 1:length(obj.z)
         f0 .= originimgs[:,:,h]
         # Fourier space computation
-        p*f0                        # Applies fft in place
-        f0 .= f0.*(Ha0.^steps)      # Multiply by transfer function each multiplication is an incremental proj
-        invp\f0                     # Applies ifft in place
+        p*f0                   # Applies fft in place
+        f0 .= f0.*(Ha0.^steps) # Multiply by transfer function each multiplication is an incremental proj
+        p\f0                   # Applies ifft in place
         originimgs[:,:,h] .= f0
     end
     return
