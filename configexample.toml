@@ -4,8 +4,8 @@ NA      =   1.0             # Numerical aperture of obj
 ftl     =   165e-3          # Focal length of tube lens
 n       =   1.33            # Refractive index
 lambda  =   600e-9          # Wavelength of light imaged
-a0      =   0           # MLA offset from NIP
-b0      =   0         # camera offset from MLA image plane
+a0      =   25e-3           # MLA offset from NIP
+b0      =   2700e-6         # camera offset from MLA image plane
 
 [mla]
 pitch   =   125e-6          # Microlens (lenslet) pitch

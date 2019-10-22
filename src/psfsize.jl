@@ -14,20 +14,20 @@ function calcsize(p::ParameterSet, obj::Space)
         steps = 10
         stepz = p.opt.a0/steps
         lineproj = zeros(ComplexF64, length(testrange), obj.zlen)
-        linemag = Array{Float64,2}(undef, length(testrange), obj.zlen)
+        linemag = zeros(length(testrange), obj.zlen)
         Hline = fresnelH(lineproj[:,1], p, stepz)
         plan = plan_fft!(lineproj[:,1])
         for i in 1:obj.zlen
-            lineproj[:,i] .= psfline(testline, obj.z[i], p)
+            lineproj[:,i] = psfline(testrange, obj.z[i], p)
             plan*lineproj[:,i]
-            lineproj[:,i] .= lineproj[:,i].*(Hline.^steps)
+            lineproj[:,i] = lineproj[:,i].*(Hline.^steps)
             plan\lineproj[:,i]
-            linemag[:,i] .= abs2.(lineproj[:,i]) ./ maximum(abs2.(lineproj[:,i]))
+            linemag[:,i] = abs2.(lineproj[:,i]) ./ maximum(abs2.(lineproj[:,i]))
         end
-        imgspace = makeimgspace(reduce(max, linemag, dims=2), p)
+        imgspace = makeimgspace(dropdims(reduce(max, linemag, dims=2); dims=2), p)
     else
-        lineproj = psfline(testline, x3max, p)
-        linemag::Vector{Float64} =  abs2.(lineproj) ./ maximum(abs2.(lineproj))
+        lineproj = psfline(testrange, x3max, p)
+        linemag =  abs2.(lineproj) ./ maximum(abs2.(lineproj))
         imgspace = makeimgspace(linemag, p)
     end
     return imgspace
@@ -46,7 +46,7 @@ function psfline(x₁line::Vector{Float64}, x₃::Float64, p::ParameterSet)
         @inbounds psfline[i] = integratePSF(v[i], u, p.opt.a0, p.con.alpha) * Kₒ
     end
 
-    return psflinemag
+    return psfline
 end
 
 function makeimgspace(psfline::Vector{Float64}, p::ParameterSet)

@@ -18,12 +18,12 @@ function intervalchange(x::Float64,a::Float64,b::Float64)
 end
 
 function lfmPSF(θ::Float64, α::Float64, v::Float64, u::Float64, a₀::Float64)
-    if a₀ > 0.0
-        # PSF for classic LFM
-        I = sqrt(cos(θ)) * besselj(0, v*sin(θ)/sin(α)) * exp((im*u*sin(θ/2)^2)/(2*sin(α/2)^2))*sin(θ)
-    else
+    if a₀ > zero(Float64)
         # PSF as given by Li et al. 2018. Used when MLA is offset from NIP by distance a₀
         I = sqrt(cos(θ)) * besselj(0,v*sin(θ)/sin(α)) * exp((-im*u*sin(θ/2)^2)/(2*sin(α/2)^2))*sin(θ)
+    else
+        # PSF for classic LFM
+        I = sqrt(cos(θ)) * besselj(0, v*sin(θ)/sin(α)) * exp((im*u*sin(θ/2)^2)/(2*sin(α/2)^2))*sin(θ)
     end
     return I
 end
@@ -35,7 +35,7 @@ function integratePSF(v::Float64, u::Float64, a₀::Float64, α::Float64)
 end
 
 function fresnelH(f0::Array{Complex{Float64},N}, par::ParameterSet, z::Float64) where N
-    
+
     Nx = size(f0,1)
     f0length = par.sim.subpixelpitch*Nx
 
@@ -46,11 +46,11 @@ function fresnelH(f0::Array{Complex{Float64},N}, par::ParameterSet, z::Float64) 
 
     # Setup frequency axes
     fx = spfreq'
+    fy = reverse(spfreq, dims=1)
     if N == 2
-        fy = reverse(spfreq, dims=1)
         FXFY = fx.^2 .+ fy.^2
     elseif N == 1
-        FXFY = fx.^2
+        FXFY = fy.^2
     end # for correctness we could include error throw if wrong array dims
 
     # Fresnel propagation func. (see: Computational Fourier Optics p.54-55,63)
@@ -135,7 +135,7 @@ end
 function itrfresnelconv!(originimgs::Array{Complex{Float64},3}, Ha0::Array{Complex{Float64},2}, steps::Int64, obj::Space)
     f0 = originimgs[:,:,1]
     p = plan_fft!(f0, [1,2])
-   
+
     Threads.@threads for h in 1:length(obj.z)
         f0 .= originimgs[:,:,h]
         # Fourier space computation
