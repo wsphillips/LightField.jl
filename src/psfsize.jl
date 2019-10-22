@@ -6,23 +6,30 @@ using FFTW
 export calcsize
 
 function calcsize(p::ParameterSet, obj::Space)
-    # we set an arbitrarily high line length to test across
-    testline = collect((0:1:(p.sim.subvpix*20)) .* p.sim.subpixelpitch)
+    # we set an arbitrarily high length to test across
+    testrange = collect((0:1:(p.sim.subvpix*20)) .* p.sim.subpixelpitch)
     x3max = maximum(abs.(obj.z))
 
     if p.opt.a0 > zero(Float64)
-        lineprojection = Array{Float64,2}(undef, length(testline), obj.zlen)
+        steps = 10
+        stepz = p.opt.a0/steps
+        lineproj = zeros(ComplexF64, length(testrange), obj.zlen)
+        linemag = Array{Float64,2}(undef, length(testrange), obj.zlen)
+        Hline = fresnelH(lineproj[:,1], p, stepz)
+        plan = plan_fft!(lineproj[:,1])
         for i in 1:obj.zlen
-            lineprojection[:,i] .= psfline(testline, obj.z[i], p)
+            lineproj[:,i] .= psfline(testline, obj.z[i], p)
+            plan*lineproj[:,i]
+            lineproj[:,i] .= lineproj[:,i].*(Hline.^steps)
+            plan\lineproj[:,i]
+            linemag[:,i] .= abs2.(lineproj[:,i]) ./ maximum(abs2.(lineproj[:,i]))
         end
-    
-    
-    else 
-        lineprojection = psfline(testline, x3max, p)
+        imgspace = makeimgspace(reduce(max, linemag, dims=2), p)
+    else
+        lineproj = psfline(testline, x3max, p)
+        linemag::Vector{Float64} =  abs2.(lineproj) ./ maximum(abs2.(lineproj))
+        imgspace = makeimgspace(linemag, p)
     end
-    psflinemag::Vector{Float64} =  abs2.(lineprojection) ./ maximum(abs2.(lineprojection))    
-    imgspace = makeimgspace(lineprojection, p)
-
     return imgspace
 end
 
@@ -43,24 +50,12 @@ function psfline(x₁line::Vector{Float64}, x₃::Float64, p::ParameterSet)
 end
 
 function makeimgspace(psfline::Vector{Float64}, p::ParameterSet)
-
     outArea = psfline .< 0.01
     if sum(outArea) == 0
         error("Estimated PSF size exceeds the limit")
     end
-
     sizeref = cld(findfirst(outArea)[1],p.sim.subvpix)
-
-    if p.opt.a0 > 0
-        """ Gives the number of supersampled pixels across the image. Note padding
-        of 1 extra microlens after ceiling value above."""
-        halfwidth = max( p.sim.subvpix*(sizeref + 1), 12*p.sim.subvpix)
-        # 12 is arbitrary; needs to be high bc img width can be larger near origin
-        # than it is at x3max if using a0 displacement
-    else
-        halfwidth = max( p.sim.subvpix*(sizeref + 1), 2*p.sim.subvpix)
-        # simple linear scaling works fine with classic LFM
-    end
+    halfwidth = max( p.sim.subvpix*(sizeref + 1), 2*p.sim.subvpix)
 
     "Create X-Y image space based on halfwidth."
     x =(-halfwidth:1:halfwidth) * p.sim.subpixelpitch
