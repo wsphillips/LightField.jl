@@ -142,11 +142,11 @@ function originPSFproj(psf::OriginPSF, lf::LightFieldSimulation)
 
         v = xl2 .* vscalar
         u = obj.z[j] * uscalar
-        Koi = par.opt.M / ((par.opt.fobj* par.opt.lambda)^2) * exp(-im * u / (4 * (sin(par.con.alpha / 2)^2)))
+        ki = par.opt.M / ((par.opt.fobj* par.opt.lambda)^2) * exp(-im * u / (4 * (sin(par.con.alpha / 2)^2)))
 
         integral = zeros(ComplexF64,size(v))
         integral[triangle] .= integratePSF.(v[triangle], u, par.opt.a0, par.con.alpha)
-        integral[triangle] .= integral[triangle] .* Koi
+        integral[triangle] .= integral[triangle] .* ki
         copyto!(integral, Symmetric(integral))
 
         psf.patternstack[j] .= unfold(integral, psf.patternstack[j])
