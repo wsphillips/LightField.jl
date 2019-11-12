@@ -50,7 +50,8 @@ function psfline(x₁line::Vector{Float64}, x₃::Float64, p::ParameterSet)
 end
 
 function makeimgspace(psfline::Vector{Float64}, p::ParameterSet)
-    outArea = psfline .< 0.01
+    outArea = psfline .< 0.1
+    print(psfline)
     if sum(outArea) == 0
         error("Estimated PSF size exceeds the limit")
     end

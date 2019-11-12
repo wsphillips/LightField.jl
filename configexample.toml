@@ -12,8 +12,8 @@ pitch   =   125e-6          # Microlens (lenslet) pitch
 fml     =   2500e-6         # Focal length of MLA in microns
 
 [simparams]
-vpix    =   5              # Number of virtual pixels for each lenslet
+vpix    =   15              # Number of virtual pixels for each lenslet
 osr     =   3               # Oversampling ratio
-zmax    =   10e-6           # Max. Z depth to reconstruct (pos=obj side)
+zmax    =   25e-6           # Max. Z depth to reconstruct (pos=obj side)
 zmin    =   0e-6            # Min. Z depth to reconstruct
 zstep   =   2e-6            # Z-plane spacing in reconstruction

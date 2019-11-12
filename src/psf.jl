@@ -59,75 +59,98 @@ function fresnelH(f0::Array{Complex{Float64},N}, par::ParameterSet, z::Float64) 
     return ComplexF64.(fftshift(H))
 end
 
-function originPSFproj(img::Space, obj::Space, par::ParameterSet)
+struct OriginPSF
+    patternstack::Array{Array{Complex{Float64},2},1}
+    originimgs::Array{Float64,3}    
 
-    (pattern_stack, originimgs) = originPSFalloc(obj, img, par)
-    originPSFproj(originimgs, pattern_stack, obj, img, par)
+    function OriginPSF(lf::LightFieldSimulation)
+        zmax = maximum(lf.obj.z)
+        patternstack = Array{Array{Complex{Float64},2},1}(undef, lf.obj.zlen)
+        originimgs = Threads.@spawn zeros(ComplexF64, lf.img.xlen, lf.img.ylen, lf.obj.zlen)
 
-    #This is what happens when Shu Jia lab super resolution is applied
-    if par.opt.a0 > 0.0
-        steps::Int64 = 10
-        stepz = par.opt.a0/steps
-        Ha0 = fresnelH(originimgs[:,:,1], par, stepz)
-        itrfresnelconv!(originimgs, Ha0, steps, obj)
+        Threads.@threads for p in 1:lf.obj.zlen
+            imgrefsize = cld((lf.img.xlen * abs(lf.obj.z[p])), zmax)
+            halfwidth = max(imgrefsize * lf.par.sim.subvpix, 2 * lf.par.sim.subvpix)
+            centerarea = max((lf.img.center - halfwidth + 1), 1):1:min((lf.img.center + halfwidth - 1), lf.img.xlen)
+            patternstack[p] = Array{Complex{Float64},2}(undef, length(centerarea), length(centerarea))
+        end
+
+        new(patternstack, fetch(originimgs))
     end
-
-    return originimgs
 end
 
-#TODO: Clean this up
+function originPSFproj(lf::LightFieldSimulation)
+
+    #(pattern_stack, originimgs) = originPSFalloc(obj, img, par)
+    psf = OriginPSF(lf)
+    originPSFproj(psf, lf)
+
+    #This is what happens when Shu Jia lab super resolution is applied
+    if lf.par.opt.a0 > 0.0
+        steps::Int64 = 10
+        stepz = lf.par.opt.a0/steps
+        Ha0 = fresnelH(psf.originimgs[:,:,1], lf.par, stepz)
+        itrfresnelconv!(psf.originimgs, Ha0, steps, lf.obj)
+    end
+
+    return psf.originimgs
+end
+
+#= TODO: Clean this up
 function originPSFalloc(obj::Space, img::Space, par::ParameterSet)
     zmax = maximum(obj.z)
     pattern_stack = Array{Array{Complex{Float64},2},1}(undef, obj.zlen)
     originimgs = complex(zeros(img.xlen,img.ylen,obj.zlen))
     Threads.@threads for p in 1:obj.zlen
-        IMGSIZE_REF_IL = cld((img.xlen*abs(obj.z[p])),zmax)
-        halfWidth_IL =  max(IMGSIZE_REF_IL*par.sim.subvpix, 2*par.sim.subvpix)
-        centerArea = max((img.center - halfWidth_IL + 1) , 1):1:min((img.center + halfWidth_IL - 1), img.xlen)
-        pattern_stack[p] = complex(zeros(Float64, length(centerArea), length(centerArea)))
+        sizeref = cld((img.xlen*abs(obj.z[p])),zmax)
+        halfwidth =  max(sizeref*par.sim.subvpix, 2*par.sim.subvpix)
+        centerarea = max((img.center - halfwidth + 1) , 1):1:min((img.center + halfwidth - 1), img.xlen)
+        pattern_stack[p] = complex(zeros(Float64, length(centerarea), length(centerarea)))
     end
 
     return (pattern_stack, originimgs)
 end
+=#
 
-#TODO: cleanup + static typing for unfoldPattern()
-function unfoldPattern(I1,pattern)
-    middle = Int(cld(size(pattern,1),2))
-    pattern[1:middle,1:middle] .= I1[:,:]
-    pattern[1:middle,middle:end] .= reverse(I1, dims=2)
-    pattern[middle:end, 1:end] .= reverse(pattern[1:middle,1:end], dims=1)
+
+function unfold(I1::Array{Complex{Float64},2}, pattern::Array{Complex{Float64},2})
+    middle::Int64 = cld(size(pattern,1),2)
+    pattern[1:middle, 1:middle] .= I1[:,:]
+    pattern[1:middle, middle:end] .= reverse(I1, dims=2)
+    pattern[middle:end, 1:end] .= reverse(pattern[1:middle, 1:end], dims=1)
     return pattern
 end
 
 #TODO: cleanup
-function originPSFproj(originimgs::Array{Complex{Float64},3}, pattern_stack::Array{Array{Complex{Float64},2},1}, obj::Space, img::Space, par::ParameterSet)
+function originPSFproj(psf::OriginPSF, lf::LightFieldSimulation)
     zmax = maximum(obj.z)
+    vscalar = lf.par.con.k * sin(lf.par.con.alpha)
+    uscalar = 4 * lf.par.con.k * (sin(lf.par.con.alpha / 2)^2)
     Threads.@threads for j in 1:obj.zlen
 
-        IMGSIZE_REF_IL = cld((img.xlen*abs(obj.z[j])),zmax)
-        halfWidth_IL =  max(IMGSIZE_REF_IL*par.sim.subvpix, 2*par.sim.subvpix)
-        centerArea = Int.(max((img.center - halfWidth_IL + 1) , 1):1:min((img.center + halfWidth_IL - 1), img.xlen))
-        xL2length = length(centerArea[1]:img.center)
-        triangleIndices = falses(xL2length, xL2length)
+        sizeref = cld((img.xlen * abs(obj.z[j])),zmax)
+        halfwidth::Int64 =  max(sizeref * par.sim.subvpix, 2 * par.sim.subvpix)
+        centerarea::Array{Int64,1} = max((img.center - halfwidth + 1), 1):1:min((img.center + halfwidth - 1), img.xlen)        
+        
+        triangle = falses(length(centerarea[1]:img.center), length(centerarea[1]:img.center))
 
-        for X1 in 1:xL2length
-            triangleIndices[1:X1,X1] .= true
+        for x in 1:size(triangle,1)
+            triangle[1:x, x] = true
         end
 
-        xL2normsq = ((( img.x[Int.(centerArea[1]:img.center)]'.^2  .+
-        img.y[Int.(centerArea[1]:img.center)].^2 ) .^0.5) ./ par.opt.M)
+        xl2 = ((img.x[centerarea[1]:img.center]'.^2  .+ img.y[centerarea[1]:img.center].^2) .^0.5) ./ par.opt.M
 
-        v = xL2normsq.*(par.con.k*sin(par.con.alpha))
-        u = 4*par.con.k*obj.z[j]*(sin(par.con.alpha/2)^2)
-        Koi = par.opt.M/((par.opt.fobj*par.opt.lambda)^2)*exp(-im*u/(4*(sin(par.con.alpha/2)^2)))
+        v = xl2 .* vscalar
+        u = obj.z[j] * uscalar
+        Koi = par.opt.M / ((par.opt.fobj* par.opt.lambda)^2) * exp(-im * u / (4 * (sin(par.con.alpha / 2)^2)))
 
-        I1 = complex(zeros(size(v)))
-        I1[triangleIndices] .= integratePSF.(v[triangleIndices],u,par.opt.a0, par.con.alpha)
-        I1[triangleIndices] .= I1[triangleIndices] .* Koi
-        copyto!(I1,Symmetric(I1))
+        integral = zeros(ComplexF64,size(v))
+        integral[triangle] .= integratePSF.(v[triangle], u, par.opt.a0, par.con.alpha)
+        integral[triangle] .= integral[triangle] .* Koi
+        copyto!(integral, Symmetric(integral))
 
-        pattern_stack[j] .= unfoldPattern(I1,pattern_stack[j])
-        originimgs[centerArea,centerArea,j] .= pattern_stack[j][:,:]
+        psf.patternstack[j] .= unfold(integral, psf.patternstack[j])
+        originimgs[centerarea, centerarea, j] .= psf.patternstack[j][:,:]
     end
     return
 end
