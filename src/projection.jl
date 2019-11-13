@@ -173,7 +173,7 @@ end
 
 function propagate(lf::LightFieldSimulation)
     # call to generate originpsf
-    originpsf = originPSFproj(lf.img, lf.obj, lf.par)
+    originpsf = originPSFproj(lf)
     obj = lf.obj
     sinckern = sinc1d()
     delta = Delta(lf)
