@@ -7,7 +7,7 @@ include("psfsize.jl")
 include("projection.jl")
 
 using .psf, .psfsize, .params, .projection 
-using TOML
+using Pkg.TOML
 
 function setup(filename::String)
 

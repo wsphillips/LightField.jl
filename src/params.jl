@@ -1,6 +1,6 @@
 module params
 
-using TOML
+using Pkg.TOML
 using DSP
 
 export MicOptics, SimulationParams, Constants, ParameterSet, Space, MicroLensArray, LightFieldSimulation
