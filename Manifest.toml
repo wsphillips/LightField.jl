@@ -237,14 +237,6 @@ git-tree-sha1 = "593e6f3aa2912051478c078e8ad738c0d9f7a77a"
 uuid = "cf896787-08d5-524d-9de7-132aaa0cb996"
 version = "1.0.1"
 
-[[TOML]]
-deps = ["Dates"]
-git-tree-sha1 = "f0955321b78cffbe95507e99fde6c41efd03698a"
-repo-rev = "master"
-repo-url = "https://github.com/JuliaStdlibs/TOML.jl.git"
-uuid = "037cace4-c66a-5006-a6b7-c26ba1b2f83e"
-version = "0.0.0"
-
 [[Test]]
 deps = ["Distributed", "InteractiveUtils", "Logging", "Random"]
 uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
