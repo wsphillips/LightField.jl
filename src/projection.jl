@@ -1,24 +1,24 @@
 module projection
 
 using FFTW, PaddedViews
-using ..params, ..psf 
+using ..params, ..psf
 using Base.Threads
 using DSP
 #import FFTW.cFFTWplan
 export propagate, HMatrix
 
 struct Delta
-  x::Vector{Int}
-  y::Vector{Int}
+  x::Vector{Int64}
+  y::Vector{Int64}
   function Delta(lf::LightFieldSimulation)
     obj = lf.obj
     sim = lf.par.sim
     offset = obj.center
-    xidx = repeat(1:obj.xlen, inner = obj.ylen)
-    yidx = repeat(obj.ylen:1, outer = obj.xlen)
-    deltax = Int.((yidx .- offset) .* sim.osr)
-    deltay = Int.((yidx .- offset) .* sim.osr)
-    new(deltax, deltay)
+    xidx = collect(repeat(1:obj.xlen, inner = obj.ylen))
+    yidx = collect(repeat(obj.ylen:-1:1, outer = obj.xlen))
+    x = (xidx .- offset) .* sim.osr
+    y = (yidx .- offset) .* sim.osr
+    new(x, y)
   end
 end
 
@@ -27,7 +27,7 @@ struct HMatrix
     kernel::Array{ComplexF64,2}
     flayer::Array{ComplexF64,3}
     rlayer::Array{Float64,3}
-    dsrlayer::Array{Float32,3}
+    dsrlayer::Array{Float64,3}
     multiwdf::Array{Float64,6}
     perlayer::Int
     lenslets::Int
@@ -42,13 +42,13 @@ struct HMatrix
         psfsize = size(originpsf,1)
 
         kernel = fresnelH(originpsf[:,:,1], p, p.opt.d)
-       
+
         flayer = Array{ComplexF64,3}(undef,(psfsize, psfsize, perlayer))
         rlayer = Array{Float64,3}(undef,(psfsize, psfsize, perlayer))
-        dsrlayer = Array{Float32,3}(undef,(samples, samples, perlayer))
-        multiwdf = Array{Float32,6}(undef,(N, N, lenslets, lenslets, N, N))
-       
-        FFTW.set_num_threads(Threads.nthreads()>>1)
+        dsrlayer = Array{Float64,3}(undef,(samples, samples, perlayer))
+        multiwdf = Array{Float64,6}(undef,(N, N, lenslets, lenslets, N, N))
+
+		FFTW.set_num_threads(Threads.nthreads()>> 1)
         plan = plan_fft!(flayer,[1,2], flags=FFTW.MEASURE)
 
         new(kernel, flayer, rlayer, dsrlayer, multiwdf, perlayer, lenslets, N, plan)
@@ -80,7 +80,7 @@ function sinc1d()
 end
 
 "Image translation using PaddedViews"
-function shift(img::Union{Array{ComplexF64,2},Array{Float64,2}}, Δx::Int, Δy::Int)
+function shift(img::Array{ComplexF64,2}, Δx::Int, Δy::Int)
     @views begin
         if  Δx > 0
             if Δy > 0
@@ -137,18 +137,20 @@ end
 
 function downsample!(H::HMatrix, kernel1D::Vector{Float64}, samples::Vector{Int})
     Threads.@threads for i in 1:size(H.rlayer,3)
-        a = @view(conv(kernel1D,kernel1D, H.rlayer[:,:,i])[6:end-6,6:end-6])
-        H.dsrlayer[:,:,i] .= view(a,samples,samples)
+	    FFTW.set_num_threads(1)
+		H.dsrlayer[:,:,i] .= view(@view(conv(kernel1D,kernel1D, H.rlayer[:,:,i])[6:end-6,6:end-6]),samples,samples)
     end
+	FFTW.set_num_threads(8)
     return
 end
+
 
 function lfphase!(H::HMatrix, lf::LightFieldSimulation)
   N = lf.par.sim.vpix
   zlen = lf.obj.zlen
   samplelen = size(H.dsrlayer,1)
-  lenslets = H.lenslets 
-  
+  lenslets = H.lenslets
+
   for i in 1:N, j in 1:N
     bylenslets = @view(H.dsrlayer[i:N:end, j:N:end, :])
     for a in 1:lenslets, b in 1:lenslets
@@ -168,8 +170,9 @@ function lfphase!(H::HMatrix, lf::LightFieldSimulation)
     layer4d[:,:,i,j] .= rot180(layer4d[:,:,i,j])
   end
 
-  return 
+  return
 end
+
 
 function propagate(lf::LightFieldSimulation)
     # call to generate originpsf
@@ -179,18 +182,18 @@ function propagate(lf::LightFieldSimulation)
     delta = Delta(lf)
     samplepts = samples(lf)
     Hlayer = HMatrix(lf, originpsf, length(samplepts))
-    Himgs = Array{Float32,5}(undef,length(samplepts), length(samplepts), Hlayer.N, Hlayer.N, obj.zlen)
+    Himgs = Array{Float64,5}(undef,length(samplepts), length(samplepts), Hlayer.N, Hlayer.N, obj.zlen)
     # make H matrix
     for layer in 1:obj.zlen
-
         shiftpsf!(Hlayer, originpsf[:,:,layer], delta)
-        stackmul!(Hlayer, lf.mla.array)
-        fresnelconv!(Hlayer)
+		stackmul!(Hlayer, lf.mla.array)
+		fresnelconv!(Hlayer)
         psfmag!(Hlayer)
         downsample!(Hlayer, sinckern, samplepts)
-        #lfphase!(Hlayer, lf)
-        Himgs[:,:,:,:,layer] .= reshape(view(Hlayer.dsrlayer,:),length(samplepts),length(samplepts), lf.par.sim.vpix, lf.par.sim.vpix)
-    end
+		# I think missing reverse shift before phase space remapping, still wicked lol
+        lfphase!(Hlayer, lf)
+		Himgs[:,:,:,:,layer] .= reshape(view(Hlayer.dsrlayer,:),length(samplepts),length(samplepts), lf.par.sim.vpix, lf.par.sim.vpix)
+	end
     return Himgs
 end
 
@@ -217,4 +220,3 @@ function postprocess(Himgs::Array{ComplexF64,3}, objspace::Space, Zidx::Array{In
     return Himgs
 end
 =#
-

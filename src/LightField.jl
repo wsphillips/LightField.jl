@@ -6,7 +6,7 @@ include("psfsize.jl")
 
 include("projection.jl")
 
-using .psf, .psfsize, .params, .projection 
+using .psf, .psfsize, .params, .projection
 using Pkg.TOML
 
 function setup(filename::String)
@@ -21,14 +21,12 @@ function setup(filename::String)
     sim = SimulationParams(pop!(config, "simparams"), pitch)
     con = Constants(opt)
 
-    xobj = collect((sim.pixelpitch / opt.M) .* (-sim.vpix:1:sim.vpix))
-    yobj = collect((sim.pixelpitch / opt.M) .* (-sim.vpix:1:sim.vpix))
-    zobj = collect(sim.zmin:sim.zstep:sim.zmax)
+    xobj::Vector{Float64} = (sim.pixelpitch / opt.M) .* collect(-fld(sim.vpix,2):1:fld(sim.vpix,2))
+    yobj::Vector{Float64} = (sim.pixelpitch / opt.M) .* collect(-fld(sim.vpix,2):1:fld(sim.vpix,2))
+    zobj::Vector{Float64} = sim.zmin:sim.zstep:sim.zmax
 
-    xml = collect((-(sim.subvpix - 1) / 2:1:(sim.subvpix - 1) / 2) .*
-                                                            sim.subpixelpitch)
-    yml = collect((-(sim.subvpix - 1) / 2:1:(sim.subvpix - 1) / 2) .*
-                                                            sim.subpixelpitch)
+    xml::Vector{Float64} = collect(-fld((sim.subvpix - 1), 2):1:fld((sim.subvpix - 1), 2)) .* sim.subpixelpitch
+    yml::Vector{Float64} = collect(-fld((sim.subvpix - 1), 2):1:fld((sim.subvpix - 1), 2)) .* sim.subpixelpitch
     obj = Space(xobj, yobj, zobj)
     mlaspace = Space(xml, yml)
     par = ParameterSet(opt, sim, con)

@@ -51,12 +51,11 @@ end
 
 function makeimgspace(psfline::Vector{Float64}, p::ParameterSet)
     outArea = psfline .< 0.1
-    print(psfline)
     if sum(outArea) == 0
         error("Estimated PSF size exceeds the limit")
     end
     sizeref = cld(findfirst(outArea)[1],p.sim.subvpix)
-    halfwidth = max( p.sim.subvpix*(sizeref + 1), 2*p.sim.subvpix)
+    halfwidth = max( p.sim.subvpix*(sizeref + 4), 2*p.sim.subvpix)
 
     "Create X-Y image space based on halfwidth."
     x =(-halfwidth:1:halfwidth) * p.sim.subpixelpitch

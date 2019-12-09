@@ -115,16 +115,16 @@ struct MicroLensArray
     space::Space
 
     function MicroLensArray(pitch::Float64, fml::Float64, mlaspace::Space, img::Space, par::ParameterSet)
-        center = findfirst(img.x .== 0)
+        #center = findfirst(img.x .== 0)
         mllen = mlaspace.xlen
         
-        allcenters = vcat(center:-mllen:1, (center + mllen):mllen:img.xlen)
+        allcenters = vcat(img.center:-mllen:1, (img.center + mllen):mllen:img.xlen)
         sort!(allcenters) 
     
-        a = complex(zeros(mllen,mllen))
+        a = zeros(ComplexF64, mllen, mllen)
     
         l2norm = mlaspace.x.^2 .+ mlaspace.y'.^2
-        a .= exp.(((-im * par.con.k) / (2 * fml)) .* l2norm);
+        a .= exp.(-im * par.con.k / (2 * fml) .* l2norm);
     
         b = zeros(ComplexF64, img.xlen, img.ylen)
         b[allcenters, allcenters] .= 1

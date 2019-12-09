@@ -20,10 +20,10 @@ end
 function lfmPSF(θ::Float64, α::Float64, v::Float64, u::Float64, a₀::Float64)
     if a₀ > zero(Float64)
         # PSF as given by Li et al. 2018. Used when MLA is offset from NIP by distance a₀
-        I = sqrt(cos(θ)) * besselj(0,v*sin(θ)/sin(α)) * exp((-im*u*sin(θ/2)^2)/(2*sin(α/2)^2))*sin(θ)
+        I = sqrt(cos(θ)) * besselj(0, sin(θ)/sin(α)*v) * (1+cos(θ)) * exp((im*u*sin(θ/2)^2)/(2*sin(α/2)^2)) * sin(θ)
     else
         # PSF for classic LFM
-        I = sqrt(cos(θ)) * besselj(0, v*sin(θ)/sin(α)) * exp((im*u*sin(θ/2)^2)/(2*sin(α/2)^2))*sin(θ)
+        I = sqrt(cos(θ)) * besselj(0, sin(θ)/sin(α)*v) * (1+cos(θ)) * exp((-im*u*sin(θ/2)^2)/(2*sin(α/2)^2)) * sin(θ)
     end
     return I
 end
@@ -51,17 +51,19 @@ function fresnelH(f0::Array{Complex{Float64},N}, par::ParameterSet, z::Float64) 
         fxfy = fx.^2 .+ fy.^2
     elseif N == 1
         fxfy = fy.^2
-    end 
+    else
+        throw("something wrong")
+    end
 
     # Fresnel propagation func. (see: Computational Fourier Optics p.54-55,63)
-    H = exp(im*par.con.k0*z).*exp.((-im*pi*par.opt.lambda*z) .* fxfy)
+    H::Array{ComplexF64,N} = exp(im*par.con.k0*z).*exp.((-im*pi*par.opt.lambda*z) .* fxfy)
     # Shift H for later fourier space calc + convert back to 64-bit precision
-    return ComplexF64.(fftshift(H))
+    return fftshift(H)
 end
 
 struct OriginPSF
     patternstack::Array{Array{Complex{Float64},2},1}
-    originimgs::Array{Complex{Float64},3}    
+    originimgs::Array{Complex{Float64},3}
 
     function OriginPSF(lf::LightFieldSimulation)
         zmax = maximum(lf.obj.z)
@@ -104,22 +106,22 @@ function unfold(integral::Array{Complex{Float64},2}, pattern::Array{Complex{Floa
 end
 
 function originPSFproj(psf::OriginPSF, lf::LightFieldSimulation)
-    
+
     img = lf.img
     obj = lf.obj
     con = lf.par.con
     sim = lf.par.sim
     opt = lf.par.opt
-    
+
     zmax = maximum(obj.z)
     vscalar = con.k * sin(con.alpha)
     uscalar = 4 * con.k * (sin(con.alpha / 2)^2)
-    
+
     Threads.@threads for j in 1:obj.zlen
 
         sizeref = cld((img.xlen * abs(obj.z[j])),zmax)
         halfwidth::Int64 =  max(sizeref * sim.subvpix, 2 * sim.subvpix)
-        centerarea::Array{Int64,1} = max((img.center - halfwidth + 1), 1):1:min((img.center + halfwidth - 1), img.xlen)                
+        centerarea::Array{Int64,1} = max((img.center - halfwidth + 1), 1):1:min((img.center + halfwidth - 1), img.xlen)
         triangle = falses(length(centerarea[1]:img.center), length(centerarea[1]:img.center))
 
         for x in 1:size(triangle,1)
@@ -147,7 +149,7 @@ function itrfresnelconv!(originimgs::Array{Complex{Float64},3}, Ha0::Array{Compl
     f0 = originimgs[:,:,1]
     p = plan_fft!(f0, [1,2])
 
-    Threads.@threads for h in 1:length(obj.z)
+    for h in 1:length(obj.z)
         f0 .= originimgs[:,:,h]
         p*f0                   # Applies fft in place
         f0 .= f0.*(Ha0.^steps) # Multiply by transfer function each multiplication is an incremental proj
